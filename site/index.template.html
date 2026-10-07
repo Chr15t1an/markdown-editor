@@ -1,0 +1,86 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="color-scheme" content="light dark">
+<title>Markdown Editor — a free, open markdown editor for Mac</title>
+<meta name="description" content="A free, open-source markdown editor for Mac with Typora-style inline editing. Drop a folder on it to open it. No account, no vault.">
+<meta property="og:type" content="website">
+<meta property="og:url" content="https://markdown.chri5tian.com/">
+<meta property="og:title" content="Markdown Editor — a free, open markdown editor for Mac">
+<meta property="og:description" content="Typora-style inline editing. Drop a folder on it to open it. No account, no vault. MIT-licensed.">
+<meta property="og:image" content="https://markdown.chri5tian.com/screenshot.png">
+<meta property="og:image:width" content="1100">
+<meta property="og:image:height" content="750">
+<meta property="og:image:alt" content="Markdown Editor with a folder of notes in the sidebar and a note rendered inline">
+<meta name="twitter:card" content="summary_large_image">
+<link rel="stylesheet" href="/style.css">
+</head>
+<body>
+<main>
+  <header class="hero">
+    <p class="app-name">Markdown Editor</p>
+    <h1>A free, open markdown editor for Mac</h1>
+    <p class="lede">I wanted Typora's one-pane editing without the price tag, so I built a small native version.
+      Markdown renders in place as you type, and any folder you drop on it opens as a file tree.
+      No account, no vault.</p>
+    <p class="download">
+      <a class="button" href="/{{ZIP}}" download>Download for Mac</a>
+      <span class="meta">v{{VERSION}} · {{SIZE_MB}} MB · macOS 15 or later · Apple Silicon</span>
+    </p>
+  </header>
+
+  <figure class="shot">
+    <img src="/screenshot.png" width="1100" height="750"
+         alt="Markdown Editor with a folder of notes in the sidebar and a note rendered inline">
+  </figure>
+
+  <section class="features" aria-label="Features">
+    <div>
+      <h2>Inline editing</h2>
+      <p>Headings, bold, links, lists and code render as you type. One pane, no preview toggle.</p>
+    </div>
+    <div>
+      <h2>Drop a folder to open it</h2>
+      <p>Drag any folder onto the window or the Dock icon. Your notes stay plain <code>.md</code> files where they are.</p>
+    </div>
+    <div>
+      <h2>Free and open</h2>
+      <p>No price, no account, no tracking. The source is MIT-licensed.</p>
+    </div>
+  </section>
+
+  <section class="first-launch" aria-labelledby="first-launch">
+    <h2 id="first-launch">First launch</h2>
+    <p>The app is signed ad-hoc, <strong>not with an Apple Developer ID, and not notarized</strong>,
+      so macOS blocks the first launch. You allow it once:</p>
+    <ol>
+      <li>Unzip the download (Safari may do this for you) and move <b>Markdown Editor</b> to Applications.</li>
+      <li>Double-click it. macOS shows <span class="ui">“Markdown Editor” Not Opened</span>. Click <b>Done</b>, not Move to Trash.</li>
+      <li>Open <b>System Settings › Privacy &amp; Security</b> and scroll down to <b>Security</b>.
+        Next to <span class="ui">“Markdown Editor” was blocked to protect your Mac</span>, click <b>Open Anyway</b>.
+        The button shows for about an hour after you try to open the app.</li>
+      <li>Confirm in the warning that follows, then enter your login password or use Touch ID.</li>
+    </ol>
+    <p>After that it opens like any other app.</p>
+    <p class="warn">Please don’t run <code>xattr -dr com.apple.quarantine</code> on it, even though some sites
+      suggest it. That skips the malware check macOS runs on first launch. If you’d rather not trust a
+      download, build it from the source instead.</p>
+  </section>
+
+  <section class="verify" aria-labelledby="verify">
+    <h2 id="verify">Check the download</h2>
+    <p>SHA-256 of <code>{{ZIP}}</code>:</p>
+    <p><code class="hash">{{SHA256}}</code></p>
+    <p>In Terminal, from the folder the zip is in:</p>
+    <pre><code>echo "{{SHA256}}  {{ZIP}}" | shasum -a 256 -c</code></pre>
+  </section>
+</main>
+<footer>
+  <a href="https://github.com/Chr15t1an/markdown-editor">Source on GitHub</a>
+  <a href="https://github.com/Chr15t1an/markdown-editor/blob/main/LICENSE">MIT License</a>
+  <a href="https://chri5tian.com">chri5tian.com</a>
+</footer>
+</body>
+</html>

@@ -9,24 +9,46 @@ Typora is the right shape for editing markdown — one pane, WYSIWYG, open any f
 - Typora-style inline editing: markdown syntax renders in place while you type, no preview toggle.
 - Drag a folder onto the window or the Dock icon and it opens to that folder, with a sidebar file tree.
 
-Anything beyond that (themes, export, plugins) is out of scope until it's actually missed. Background on the pick: `documentation/mac-apps/README.md`.
+Anything beyond that (themes, export, plugins) is out of scope until it's actually missed.
 
-## Running it
+## Install
 
-Requires macOS 15 and Xcode 16 installed at `/Applications/Xcode.app` (it does not need to be the
-selected developer directory — the script and commands below point at it per command).
+Download the zip from **https://markdown.chri5tian.com** (macOS 15 or later, Apple Silicon), unzip it
+and move **Markdown Editor** to Applications.
+
+The app is signed ad-hoc, not with an Apple Developer ID, and is not notarized, so macOS blocks the
+first launch. Double-click it, click **Done**, then open System Settings › Privacy & Security, scroll
+to Security. Next to the notice that "Markdown Editor" was blocked to protect your Mac, click
+**Open Anyway**. Confirm, authenticate, and it opens normally from then on. The site lists the steps and the zip's SHA-256.
+
+## Building from source
+
+Requires macOS 15 or later on Apple Silicon. Building from source skips the Gatekeeper prompt,
+because nothing is quarantined.
 
 ```sh
 scripts/make-app.sh             # build + sign "build/Markdown Editor.app"
 scripts/make-app.sh --install   # same, then copy it to /Applications (quits a running copy first)
-DEVELOPER_DIR=/Applications/Xcode.app/Contents/Developer swift test   # test suite
 ```
+
+The script picks the toolchain itself:
+
+- **Xcode 16** at `/Applications/Xcode.app` (it does not need to be the selected developer
+  directory): builds with `swift build`. Run the test suite with
+  `DEVELOPER_DIR=/Applications/Xcode.app/Contents/Developer swift test`.
+- **Command Line Tools only** (no Xcode): builds with two plain `swiftc` calls against the CLT's
+  `MacOSX.sdk`. `swift test` does not work on this path — XCTest ships with Xcode — so tests need
+  an Xcode install.
+
+To cut a release (zip, SHA-256 and the download site), see [`docs/release.md`](docs/release.md).
+
+## Using it
 
 Open a folder any of these ways; it replaces the one that is open:
 
 - drag a folder (or a `.md` file) onto the window or the Dock icon
 - File › Open… (⌘O), or File › Open Recent
-- `open -a "Markdown Editor" ~/Documents/GitHub/documentation`
+- `open -a "Markdown Editor" ~/Notes`
 
 Opening a single `.md` file selects it in place when it is inside the folder already open;
 a file from anywhere else opens its own folder with that file selected. The last folder and file
@@ -57,3 +79,7 @@ The script uses that identity automatically when it exists. If a grant goes stal
 ## Stack
 
 Native macOS (Swift, SwiftUI/AppKit). No Electron, no web view shell.
+
+## License
+
+MIT — see [`LICENSE`](LICENSE).

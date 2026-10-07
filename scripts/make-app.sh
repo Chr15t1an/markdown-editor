@@ -5,7 +5,8 @@
 # Signing: with a keychain identity named "Markdown Editor Dev" the designated requirement names
 # the bundle id, so macOS folder-access (TCC) grants survive rebuilds. Without it the app is signed
 # ad-hoc, which works but keys TCC grants to this build's cdhash — expect a ~/Documents prompt after
-# every rebuild. The build is never blocked on this.
+# every rebuild. The build is never blocked on this. MARKDOWN_EDITOR_SIGN_ADHOC=1 forces ad-hoc
+# signing without the note below (scripts/package-release.sh uses it for public releases).
 #
 set -euo pipefail
 
@@ -35,8 +36,31 @@ fi
 plutil -lint Resources/Info.plist >/dev/null
 
 # ---------------------------------------------------------------- build
-swift build -c release --arch arm64
-BIN_DIR="$(swift build -c release --arch arm64 --show-bin-path)"
+# Without Xcode, fall back to plain swiftc: on the 2026-10 Mac the Command Line Tools' swift-package
+# aborts in dyld, and the newest CLT SDK (MacOSX27) is newer than the CLT compiler, so pin the
+# MacOSX.sdk symlink (the SDK the compiler shipped with). No package dependencies, so two calls do it.
+build_with_swiftc() {
+  local out="build/swiftc"
+  local flags=(-sdk /Library/Developer/CommandLineTools/SDKs/MacOSX.sdk -O -swift-version 6
+               -target arm64-apple-macosx15.0)
+  # The link runs through clang, which takes the SDK *version* stamp from SDKROOT, not swiftc's
+  # --sysroot; without this the binary says "sdk 27.0" instead of the pinned SDK's 26.5.
+  local -x SDKROOT=/Library/Developer/CommandLineTools/SDKs/MacOSX.sdk
+  rm -rf "$out" && mkdir -p "$out"
+  swiftc "${flags[@]}" -module-name MarkdownCore -parse-as-library \
+    -emit-module -emit-module-path "$out/MarkdownCore.swiftmodule" \
+    -emit-library -static -o "$out/libMarkdownCore.a" Sources/MarkdownCore/*.swift
+  swiftc "${flags[@]}" -module-name "$EXE" -I "$out" -L "$out" -lMarkdownCore \
+    Sources/MarkdownEditor/*.swift -o "$out/$EXE"
+  BIN_DIR="$out"
+}
+
+if [[ -n "${DEVELOPER_DIR:-}" ]]; then
+  swift build -c release --arch arm64
+  BIN_DIR="$(swift build -c release --arch arm64 --show-bin-path)"
+else
+  build_with_swiftc
+fi
 
 rm -rf "$APP"
 mkdir -p "$APP/Contents/MacOS" "$APP/Contents/Resources"
@@ -45,7 +69,9 @@ cp Resources/Info.plist "$APP/Contents/Info.plist"
 
 # ---------------------------------------------------------------- sign
 IDENTITIES="$(security find-identity -v -p codesigning 2>/dev/null || true)"
-if grep -q "\"$IDENTITY\"" <<<"$IDENTITIES"; then
+if [[ "${MARKDOWN_EDITOR_SIGN_ADHOC:-0}" == 1 ]]; then
+  codesign --force --sign - --identifier "$BUNDLE_ID" "$APP"
+elif grep -q "\"$IDENTITY\"" <<<"$IDENTITIES"; then
   codesign --force --sign "$IDENTITY" --identifier "$BUNDLE_ID" "$APP"
 else
   codesign --force --sign - --identifier "$BUNDLE_ID" "$APP"
