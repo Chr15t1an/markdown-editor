@@ -102,4 +102,43 @@ final class FileStoreTests: XCTestCase {
         let mdate = try fm.attributesOfItem(atPath: url.path)[.modificationDate] as? Date
         XCTAssertEqual(mdate!.timeIntervalSince1970, past.timeIntervalSince1970, accuracy: 1)
     }
+
+    func testUntitledNames() {
+        XCTAssertEqual(FileStore.untitledName(1), "Untitled.md")
+        XCTAssertEqual(FileStore.untitledName(2), "Untitled 2.md")
+        XCTAssertEqual(FileStore.untitledName(10), "Untitled 10.md")
+    }
+
+    func testCreateNewPicksNextFreeName() throws {
+        let dir = try fixtureDirectory("create")
+        defer { try? FileManager.default.removeItem(at: dir) }
+        let first = try FileStore.createNew(in: dir)
+        XCTAssertEqual(first.lastPathComponent, "Untitled.md")
+        XCTAssertEqual(try Data(contentsOf: first), Data())
+        let second = try FileStore.createNew(in: dir)
+        XCTAssertEqual(second.lastPathComponent, "Untitled 2.md")
+    }
+
+    func testCreateNewNeverOverwritesAnExistingNote() throws {
+        let dir = try fixtureDirectory("create-keep")
+        defer { try? FileManager.default.removeItem(at: dir) }
+        let existing = dir.appendingPathComponent("Untitled.md")
+        try "keep me\n".write(to: existing, atomically: true, encoding: .utf8)
+        let made = try FileStore.createNew(in: dir)
+        XCTAssertEqual(made.lastPathComponent, "Untitled 2.md")
+        XCTAssertEqual(try String(contentsOf: existing, encoding: .utf8), "keep me\n")
+        XCTAssertThrowsError(try FileStore.createExclusively(existing)) { error in
+            XCTAssertEqual((error as? CocoaError)?.code, .fileWriteFileExists)
+        }
+        XCTAssertEqual(try String(contentsOf: existing, encoding: .utf8), "keep me\n")
+    }
+
+    func testCreateNewFillsAGap() throws {
+        let dir = try fixtureDirectory("create-gap")
+        defer { try? FileManager.default.removeItem(at: dir) }
+        for name in ["Untitled.md", "Untitled 3.md"] {
+            try "x".write(to: dir.appendingPathComponent(name), atomically: true, encoding: .utf8)
+        }
+        XCTAssertEqual(try FileStore.createNew(in: dir).lastPathComponent, "Untitled 2.md")
+    }
 }

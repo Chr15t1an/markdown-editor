@@ -66,6 +66,50 @@ public enum FileStore {
         return wrote
     }
 
+    /// The n-th name tried for a new note: `Untitled.md`, `Untitled 2.md`, `Untitled 3.md`, …
+    public static func untitledName(_ n: Int, baseName: String = "Untitled", extension ext: String = "md") -> String {
+        n <= 1 ? "\(baseName).\(ext)" : "\(baseName) \(n).\(ext)"
+    }
+
+    /// Creates an empty note in `dir` under the first free `untitledName` and returns its URL.
+    /// Each name is created exclusively (`withoutOverwriting`) under file coordination, so an
+    /// existing file is never overwritten, even when another app creates one at the same moment;
+    /// a taken name moves on to the next number. Any other error is thrown. Names already on
+    /// disk are skipped before coordinating, so no presenter of an existing note is asked to give
+    /// it up — pass the caller's own presenter too, so the coordinator never waits on it.
+    public static func createNew(in dir: URL, baseName: String = "Untitled",
+                                 presenter: NSFilePresenter? = nil) throws -> URL {
+        for n in 1...999 {
+            let url = dir.appendingPathComponent(untitledName(n, baseName: baseName)).standardizedFileURL
+            if FileManager.default.fileExists(atPath: url.path) { continue }
+            do {
+                try createExclusively(url, presenter: presenter)
+                return url
+            } catch CocoaError.fileWriteFileExists {
+                continue
+            }
+        }
+        throw CocoaError(.fileWriteFileExists, userInfo: [NSFilePathErrorKey: dir.appendingPathComponent(baseName).path])
+    }
+
+    /// Writes an empty file at `url`, failing with `CocoaError.fileWriteFileExists` if anything
+    /// is already there. Coordinated, so presenters of the folder hear about the new file.
+    public static func createExclusively(_ url: URL, presenter: NSFilePresenter? = nil) throws {
+        var coordinationError: NSError?
+        var writeError: Error?
+        NSFileCoordinator(filePresenter: presenter).coordinate(
+            writingItemAt: url, options: .forReplacing, error: &coordinationError
+        ) { coordinated in
+            do {
+                try Data().write(to: coordinated, options: .withoutOverwriting)
+            } catch {
+                writeError = error
+            }
+        }
+        if let coordinationError { throw coordinationError }
+        if let writeError { throw writeError }
+    }
+
     private static func replace(_ url: URL, with data: Data, createIfMissing: Bool) throws -> Bool {
         let fm = FileManager.default
         guard fm.fileExists(atPath: url.path) else {

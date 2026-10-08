@@ -1,5 +1,6 @@
 import AppKit
 import MarkdownCore
+import UniformTypeIdentifiers
 
 /// The one main window: sidebar folder tree + editor, and every "open this" path.
 final class MainWindowController: NSWindowController, NSWindowDelegate {
@@ -128,6 +129,69 @@ final class MainWindowController: NSWindowController, NSWindowDelegate {
         return true
     }
 
+    // MARK: New note
+
+    /// File › New. With a folder open: creates the next free `Untitled.md` in the folder the
+    /// sidebar selection is in (else the open file's folder, else the root), selects it and puts
+    /// the cursor in it. With no folder: a Save panel picks the file, and its folder opens.
+    func newNote() {
+        guard let root = folder else { newNoteWithSavePanel(); return }
+        // Save (or explicitly discard) the current note first, so a refused switch leaves no new file.
+        guard session.prepareToLeave() else { return }
+        // Only ever inside the open folder: the open note may have been moved out of it (Finder),
+        // and the session follows a moved note.
+        let candidate = sidebar.selectedDirectory
+            ?? session.currentURL?.deletingLastPathComponent().standardizedFileURL
+            ?? root
+        let dir = Self.isInside(candidate, root) ? candidate : root
+        let url: URL
+        do {
+            url = try FileStore.createNew(in: dir, presenter: session)
+        } catch {
+            showCreateError(error, in: dir)
+            return
+        }
+        sidebar.refresh(directory: dir)
+        sidebar.reveal(url)
+        openFile(url)
+        ProbeLog.shared.dump()
+    }
+
+    /// True when `dir` is `root` or below it (compared standardized, symlinks resolved).
+    static func isInside(_ dir: URL, _ root: URL) -> Bool {
+        let d = dir.standardizedFileURL.resolvingSymlinksInPath().path
+        let r = root.standardizedFileURL.resolvingSymlinksInPath().path
+        return d == r || d.hasPrefix(r.hasSuffix("/") ? r : r + "/")
+    }
+
+    private func newNoteWithSavePanel() {
+        guard session.prepareToLeave() else { return }
+        let panel = NSSavePanel()
+        panel.title = "New Note"
+        panel.nameFieldStringValue = FileStore.untitledName(1)
+        panel.allowedContentTypes = FolderTree.markdownExtensions.compactMap { UTType(filenameExtension: $0) }
+        panel.canCreateDirectories = true
+        panel.prompt = "Create"
+        guard panel.runModal() == .OK, let url = panel.url else { return }
+        do {
+            try FileStore.createExclusively(url, presenter: session)
+        } catch CocoaError.fileWriteFileExists {
+            // The user chose an existing file and confirmed in the panel: open it, never empty it.
+        } catch {
+            showCreateError(error, in: url.deletingLastPathComponent())
+            return
+        }
+        open(url)
+    }
+
+    private func showCreateError(_ error: Error, in dir: URL) {
+        guard let window else { return }
+        let alert = NSAlert(error: error)
+        alert.messageText = "Couldn’t create a new note in “\(dir.lastPathComponent)”"
+        alert.informativeText = error.localizedDescription
+        alert.beginSheetModal(for: window)
+    }
+
     /// Reopens the folder from the previous run as the root, and selects the last file in it
     /// only if that file still exists inside that folder.
     func restoreLastSession() {
@@ -240,8 +304,12 @@ final class MainWindowController: NSWindowController, NSWindowDelegate {
             let bits = arg.split(separator: " ")
             let sender: Any? = bits.count > 1 ? NSNumber(value: Int(bits[1]) ?? 0) : nil
             // Walk this window's responder chain: NSApp.sendAction(to: nil) needs a key window,
-            // which a probe-launched (inactive) app does not have.
-            _ = window?.firstResponder?.tryToPerform(Selector(String(bits[0])), with: sender)
+            // which a probe-launched (inactive) app does not have. App-level actions (newDocument:)
+            // live on the app delegate, past that chain: fall back to NSApp's own dispatch.
+            let action = Selector(String(bits[0]))
+            if window?.firstResponder?.tryToPerform(action, with: sender) != true {
+                NSApp.sendAction(action, to: nil, from: sender)
+            }
         case "row":
             let names = sidebar.visibleRowNames.map { $0.trimmingCharacters(in: .whitespaces) }
             if let row = names.firstIndex(of: arg) {

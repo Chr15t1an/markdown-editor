@@ -273,3 +273,123 @@ final class RestoreSessionTests: XCTestCase {
         XCTAssertNil(c.session.currentURL)
     }
 }
+
+@MainActor
+final class NewNoteTests: XCTestCase {
+    var dir: URL!
+    let defaults = UserDefaults.standard
+
+    override func setUp() async throws {
+        dir = try fixtureDirectory("new-note")
+        try FileManager.default.createDirectory(at: dir.appendingPathComponent("sub"), withIntermediateDirectories: true)
+        try "n\n".write(to: dir.appendingPathComponent("sub/n.md"), atomically: true, encoding: .utf8)
+        try "top\n".write(to: dir.appendingPathComponent("top.md"), atomically: true, encoding: .utf8)
+    }
+
+    override func tearDown() async throws {
+        defaults.removeObject(forKey: MainWindowController.lastFolderKey)
+        defaults.removeObject(forKey: MainWindowController.lastFileKey)
+        try? FileManager.default.removeItem(at: dir)
+    }
+
+    private func path(_ name: String) -> String { dir.appendingPathComponent(name).standardizedFileURL.path }
+
+    func testRefreshRevealsAFileCreatedInALoadedFolder() throws {
+        let sidebar = SidebarViewController()
+        sidebar.loadView()
+        sidebar.setRoot(dir)
+        let late = dir.appendingPathComponent("late.md")
+        try "x".write(to: late, atomically: true, encoding: .utf8)
+        sidebar.reveal(late)
+        XCTAssertNil(sidebar.selectedFile, "the root is loaded, so a new file is unknown until refreshed")
+        sidebar.refresh(directory: dir)
+        sidebar.reveal(late)
+        XCTAssertEqual(sidebar.selectedFile?.path, path("late.md"))
+        XCTAssertEqual(sidebar.selectedDirectory?.path, dir.standardizedFileURL.path)
+    }
+
+    func testNewNoteCreatesSelectsAndOpensThenNumbers() throws {
+        let c = MainWindowController()
+        c.open(dir)
+        c.newNote()
+        XCTAssertTrue(FileManager.default.fileExists(atPath: path("Untitled.md")))
+        XCTAssertEqual(c.session.currentURL?.path, path("Untitled.md"))
+        XCTAssertEqual(c.sidebar.selectedFile?.path, path("Untitled.md"))
+        XCTAssertEqual(c.editor.text, "")
+        c.newNote()
+        XCTAssertEqual(c.session.currentURL?.path, path("Untitled 2.md"))
+        XCTAssertEqual(c.sidebar.selectedFile?.path, path("Untitled 2.md"))
+        c.session.close()
+    }
+
+    func testNewNoteGoesIntoTheSelectedFolderOrTheSelectedFilesFolder() throws {
+        let c = MainWindowController()
+        c.open(dir)
+        let names = c.sidebar.visibleRowNames.map { $0.trimmingCharacters(in: .whitespaces) }
+        c.sidebar.outlineView.selectRowIndexes([names.firstIndex(of: "sub")!], byExtendingSelection: false)
+        XCTAssertEqual(c.sidebar.selectedDirectory?.path, path("sub"))
+        c.newNote()
+        XCTAssertEqual(c.session.currentURL?.path, path("sub/Untitled.md"))
+        XCTAssertEqual(c.sidebar.selectedFile?.path, path("sub/Untitled.md"))
+        // A selected file means its folder.
+        c.newNote()
+        XCTAssertEqual(c.session.currentURL?.path, path("sub/Untitled 2.md"))
+        c.session.close()
+    }
+
+    func testNewNoteNeverTouchesAnExistingUntitled() throws {
+        try "keep\n".write(to: dir.appendingPathComponent("Untitled.md"), atomically: true, encoding: .utf8)
+        let c = MainWindowController()
+        c.open(dir)
+        c.newNote()
+        XCTAssertEqual(c.session.currentURL?.path, path("Untitled 2.md"))
+        XCTAssertEqual(try String(contentsOfFile: path("Untitled.md"), encoding: .utf8), "keep\n")
+        c.session.close()
+    }
+
+    func testNewNoteStaysInsideTheRootWhenTheOpenNoteIsOutsideIt() throws {
+        let outside = try fixtureDirectory("new-note-outside")
+        defer { try? FileManager.default.removeItem(at: outside) }
+        let moved = outside.appendingPathComponent("moved.md")
+        try "m\n".write(to: moved, atomically: true, encoding: .utf8)
+        let c = MainWindowController()
+        c.open(dir)
+        // The session follows a note moved out of the root (Finder); nothing is selected in the sidebar.
+        XCTAssertTrue(c.session.open(moved))
+        XCTAssertNil(c.sidebar.selectedDirectory)
+        c.newNote()
+        XCTAssertFalse(FileManager.default.fileExists(atPath: outside.appendingPathComponent("Untitled.md").path))
+        XCTAssertEqual(c.session.currentURL?.path, path("Untitled.md"))
+        XCTAssertEqual(c.sidebar.selectedFile?.path, path("Untitled.md"))
+        c.session.close()
+    }
+
+    func testIsInsideComparesWholePathComponents() {
+        XCTAssertTrue(MainWindowController.isInside(dir, dir))
+        XCTAssertTrue(MainWindowController.isInside(dir.appendingPathComponent("sub"), dir))
+        XCTAssertFalse(MainWindowController.isInside(URL(fileURLWithPath: dir.path + "-sibling"), dir))
+        XCTAssertFalse(MainWindowController.isInside(dir.deletingLastPathComponent(), dir))
+    }
+
+    func testRefusedSaveCreatesNoFile() throws {
+        let c = MainWindowController()
+        c.open(dir)
+        c.open(dir.appendingPathComponent("top.md"))
+        let top = dir.appendingPathComponent("top.md").standardizedFileURL
+        XCTAssertEqual(c.session.currentURL, top)
+        var asked = 0
+        c.session.onSaveFailure = { _, _ in }
+        c.session.confirmDiscard = { _ in asked += 1; return false }   // Keep Editing
+        c.session.writer = { _, _, _, _ in throw CocoaError(.fileWriteNoPermission) }
+        let tv = c.editor.textView!
+        tv.insertText("unsaved", replacementRange: tv.selectedRange())
+        XCTAssertTrue(c.session.isDirty)
+        c.newNote()
+        XCTAssertEqual(asked, 1)
+        XCTAssertFalse(FileManager.default.fileExists(atPath: path("Untitled.md")))
+        XCTAssertEqual(c.session.currentURL, top)
+        XCTAssertTrue(c.editor.text.contains("unsaved"))
+        c.session.confirmDiscard = { _ in true }
+        c.session.close()
+    }
+}

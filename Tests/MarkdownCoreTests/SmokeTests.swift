@@ -3,6 +3,6 @@ import XCTest
 
 final class SmokeTests: XCTestCase {
     func testVersion() {
-        XCTAssertEqual(MarkdownCore.version, "0.1.0")
+        XCTAssertEqual(MarkdownCore.version, "0.2.0")
     }
 }

@@ -62,6 +62,10 @@ Open a folder any of these ways; it replaces the one that is open:
 - File › Open… (⌘O), or File › Open Recent
 - `open -a "Markdown Editor" ~/Notes`
 
+File › New (⌘N) creates an empty `Untitled.md` (then `Untitled 2.md`, …) in the folder selected in
+the sidebar (or the open file's folder), selects it and puts the cursor in it — rename it in Finder.
+With no folder open, it asks where to save the new note and opens that folder.
+
 Opening a single `.md` file selects it in place when it is inside the folder already open;
 a file from anywhere else opens its own folder with that file selected. The last folder and file
 reopen at launch. Files save automatically a second after you stop typing, when you switch files,

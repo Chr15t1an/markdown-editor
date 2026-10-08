@@ -4,6 +4,7 @@ import UniformTypeIdentifiers
 
 /// Menu actions with no AppKit declaration, so `#selector` can name them.
 @MainActor @objc protocol EditorMenuActions {
+    func newDocument(_ sender: Any?)
     func openDocument(_ sender: Any?)
     func saveDocument(_ sender: Any?)
 }
@@ -57,6 +58,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate, EditorMenuActions {
     func applicationWillResignActive(_ notification: Notification) { windowController?.save() }
 
     // MARK: Menu actions
+
+    /// File › New (⌘N): a new empty note — see `MainWindowController.newNote()`.
+    @objc func newDocument(_ sender: Any?) { windowController?.newNote() }
 
     @objc func openDocument(_ sender: Any?) {
         let panel = NSOpenPanel()

@@ -73,6 +73,24 @@ final class SidebarViewController: NSViewController, NSOutlineViewDataSource, NS
         (outlineView.item(atRow: outlineView.selectedRow) as? FileNode).flatMap { $0.isDirectory ? nil : $0.url }
     }
 
+    /// The folder the selection is "in": a selected folder row, or a selected file's folder.
+    /// Nil when nothing is selected.
+    var selectedDirectory: URL? {
+        guard let node = outlineView.item(atRow: outlineView.selectedRow) as? FileNode else { return nil }
+        if node.isDirectory { return node.url }
+        return node.parent?.url ?? node.url.deletingLastPathComponent().standardizedFileURL
+    }
+
+    /// Re-reads `directory` if its children are already loaded, so a file just created in it can
+    /// be revealed at once (a loaded folder otherwise only learns of it when FSEvents fires).
+    func refresh(directory: URL) {
+        guard let root, let node = root.loadedNode(for: directory), node.isDirectory, node.isLoaded else { return }
+        isRevealing = true
+        node.reload()
+        outlineView.reloadItem(node === root ? nil : node, reloadChildren: true)
+        isRevealing = false
+    }
+
     /// Names of the rows currently shown, indented two spaces per level (probe/debug output).
     var visibleRowNames: [String] {
         (0..<outlineView.numberOfRows).compactMap { row in

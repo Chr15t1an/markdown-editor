@@ -10,7 +10,8 @@ import AppKit
 ///   type <text>          insert text at the caret (as typed)
 ///   key return|tab|backtab
 ///   select <loc> <len>   set the selection
-///   action <selector>    send an action to the first responder (e.g. toggleBold:)
+///   action <selector>    send an action to the first responder (e.g. toggleBold:), else to
+///                        NSApp's chain (app delegate actions such as newDocument:)
 ///   row <name>           click the sidebar row with that name
 ///   open <path>          open a folder or file
 ///   snapshot <png>       render the window content to a PNG
