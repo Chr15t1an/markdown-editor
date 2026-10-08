@@ -25,8 +25,18 @@
     <p class="lede">I wanted Typora's one-pane editing without the price tag, so I built a small native version.
       Markdown renders in place as you type, and any folder you drop on it opens as a file tree.
       No account, no vault.</p>
+    <section class="install" aria-labelledby="install">
+      <h2 id="install">Install with Terminal</h2>
+      <p>Paste this into Terminal. It downloads v{{VERSION}}, checks the zip’s SHA-256, installs
+        <b>Markdown Editor</b> to Applications and opens it. No Open Anyway step.</p>
+      <div class="oneliner">
+        <pre><code id="oneliner">curl -fsSL https://markdown.chri5tian.com/install.sh | bash</code></pre>
+        <button type="button" class="copy" data-copy="oneliner" hidden>Copy</button>
+      </div>
+      <p class="meta">Want to read it first? <code>curl -fsSL https://markdown.chri5tian.com/install.sh | less</code></p>
+    </section>
     <p class="download">
-      <a class="button" href="/{{ZIP}}" download>Download for Mac</a>
+      <a class="button button-secondary" href="/{{ZIP}}" download>Download the zip</a>
       <span class="meta">v{{VERSION}} · {{SIZE_MB}} MB · macOS 15 or later · Apple Silicon</span>
     </p>
   </header>
@@ -52,9 +62,9 @@
   </section>
 
   <section class="first-launch" aria-labelledby="first-launch">
-    <h2 id="first-launch">First launch</h2>
-    <p>The app is signed ad-hoc, <strong>not with an Apple Developer ID, and not notarized</strong>,
-      so macOS blocks the first launch. You allow it once:</p>
+    <h2 id="first-launch">Prefer a normal download?</h2>
+    <p>Use <b>Download the zip</b> above. The app is signed ad-hoc, <strong>not with an Apple Developer
+      ID, and not notarized</strong>, so macOS blocks the first launch of a downloaded copy. You allow it once:</p>
     <ol>
       <li>Unzip the download (Safari may do this for you) and move <b>Markdown Editor</b> to Applications.</li>
       <li>Double-click it. macOS shows <span class="ui">“Markdown Editor” Not Opened</span>. Click <b>Done</b>, not Move to Trash.</li>
@@ -64,9 +74,9 @@
       <li>Confirm in the warning that follows, then enter your login password or use Touch ID.</li>
     </ol>
     <p>After that it opens like any other app.</p>
-    <p class="warn">Please don’t run <code>xattr -dr com.apple.quarantine</code> on it, even though some sites
-      suggest it. That skips the malware check macOS runs on first launch. If you’d rather not trust a
-      download, build it from the source instead.</p>
+    <p class="warn">Please don’t paste <code>xattr</code> commands from other sites. The Terminal install
+      above is the supported way to skip the Open Anyway step, and it checks the SHA-256 of the exact
+      zip before installing anything.</p>
   </section>
 
   <section class="verify" aria-labelledby="verify">
@@ -82,5 +92,35 @@
   <a href="https://github.com/Chr15t1an/markdown-editor/blob/main/LICENSE">MIT License</a>
   <a href="https://chri5tian.com">chri5tian.com</a>
 </footer>
+<script>
+  // Copy buttons stay hidden without JavaScript; the command is still selectable text.
+  document.querySelectorAll("button.copy").forEach(function (button) {
+    var source = document.getElementById(button.dataset.copy);
+    button.hidden = false;
+    var show = function (label) {
+      button.textContent = label;
+      button.classList.add("copied");
+      setTimeout(function () { button.textContent = "Copy"; button.classList.remove("copied"); }, 2000);
+    };
+    // No clipboard API (or permission denied): select the text and try the older copy command.
+    var fallback = function () {
+      var range = document.createRange();
+      range.selectNodeContents(source);
+      var selection = window.getSelection();
+      selection.removeAllRanges();
+      selection.addRange(range);
+      var ok = false;
+      try { ok = document.execCommand("copy"); } catch (e) {}
+      show(ok ? "Copied" : "Press ⌘C");
+    };
+    button.addEventListener("click", function () {
+      if (navigator.clipboard && window.isSecureContext) {
+        navigator.clipboard.writeText(source.textContent).then(function () { show("Copied"); }, fallback);
+      } else {
+        fallback();
+      }
+    });
+  });
+</script>
 </body>
 </html>

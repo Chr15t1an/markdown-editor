@@ -2,5 +2,11 @@
   Content-Disposition: attachment
   Cache-Control: public, max-age=300
 
+# Shown as text in a browser (wrangler would upload it as application/x-sh, which downloads), and
+# cached like the zip it pins.
+/install.sh
+  Content-Type: text/plain; charset=utf-8
+  Cache-Control: public, max-age=300
+
 /*
   X-Content-Type-Options: nosniff

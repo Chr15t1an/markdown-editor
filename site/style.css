@@ -80,7 +80,44 @@ h1 { margin: 0 0 16px; font-size: clamp(2rem, 6vw, 2.9rem); line-height: 1.12; l
 }
 .button:hover { filter: brightness(1.08); }
 .button:focus-visible { outline: 3px solid var(--accent); outline-offset: 3px; }
+.button-secondary {
+  background: transparent;
+  color: var(--accent);
+  border: 1px solid var(--accent);
+  padding: 11px 21px;
+}
 .meta { color: var(--muted); font-size: 0.92rem; }
+
+/* ---------- terminal install */
+.install {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  padding: 20px 24px;
+  margin: 0 0 24px;
+}
+.install h2 { margin: 0 0 6px; font-size: 1.2rem; }
+.install p { margin: 0 0 12px; }
+.install .meta { margin: 12px 0 0; }
+.install .meta code { word-break: break-all; }
+.oneliner { display: flex; align-items: stretch; gap: 8px; min-width: 0; }
+.oneliner pre { flex: 1 1 auto; min-width: 0; margin: 0; white-space: pre; }
+.copy {
+  flex: 0 0 auto;
+  font: inherit;
+  font-size: 0.92rem;
+  font-weight: 600;
+  min-width: 5.5em;
+  padding: 0 14px;
+  border: 0;
+  border-radius: 8px;
+  background: var(--accent);
+  color: var(--accent-text);
+  cursor: pointer;
+}
+.copy:hover { filter: brightness(1.08); }
+.copy:focus-visible { outline: 3px solid var(--accent); outline-offset: 3px; }
+.copy.copied { background: var(--code-bg); color: var(--text); }
 
 /* ---------- screenshot */
 .shot { margin: 16px 0 40px; }
@@ -142,6 +179,9 @@ footer {
   .hero { padding-top: 40px; }
   .features { grid-template-columns: 1fr; gap: 18px; }
   .first-launch { padding: 18px 16px; }
+  .install { padding: 18px 16px; }
+  .oneliner { flex-direction: column; }
+  .copy { padding: 10px 14px; }
 }
 
 @media (prefers-reduced-motion: reduce) {

@@ -1,9 +1,10 @@
 # Releasing a new version
 
-The download site at **https://markdown.chri5tian.com** serves one page and the zip beside it, as a
+The download site at **https://markdown.chri5tian.com** serves one page, the zip beside it and
+`install.sh` (the `curl -fsSL https://markdown.chri5tian.com/install.sh | bash` installer), as a
 Cloudflare Workers static-assets project (`markdown-editor-site`) on the personal Cloudflare account.
-`scripts/package-release.sh` builds the app, zips it and renders the page, so the version, size and
-SHA-256 on the page always describe the zip deployed with it.
+`scripts/package-release.sh` builds the app, zips it and renders the page and `install.sh`, so the
+version, size and SHA-256 on the page and in the script always describe the zip deployed with them.
 
 Every command runs from the repo root unless it says otherwise, and works in bash or zsh.
 
@@ -30,7 +31,22 @@ It prints the version, the zip path and its SHA-256, and leaves:
 
 - `build/dist/Markdown-Editor-<version>.zip` and `.zip.sha256`, plus `build/dist/Markdown-Editor.zip`
   (the same bytes, at the stable "latest" URL);
-- `build/site/`, the whole deployable site.
+- `build/site/`, the whole deployable site: 8 files (`_headers`, `index.html`, `install.sh`,
+  `style.css`, `screenshot.png`, both zips and the `.sha256`). `index.html` and `install.sh` are
+  rendered from `site/index.template.html` and `site/install.template.sh`.
+
+**Re-rendering a version that is already live** (for example, to ship a page or `install.sh` change
+without a new version): do not rebuild, because a rebuild can change the bytes behind the versioned
+URL (see below). Package the zip that is already published instead:
+
+```sh
+RELEASE_ZIP=~/Documents/markdown-editor-releases/0.1.0-952815d7f0ac/Markdown-Editor-0.1.0.zip \
+  scripts/package-release.sh
+```
+
+It copies that zip byte for byte (after checking it holds an ad-hoc-signed `Markdown Editor.app`),
+takes the version from the app inside it, and renders the site from it. The printed SHA-256 must be
+the one already live.
 
 The zip is made with `ditto -c -k --norsrc --keepParent` and pinned mtimes. `--norsrc` matters: the
 default ditto zip carries `._` files that Terminal `unzip` drops inside the bundle, which breaks the
@@ -59,17 +75,39 @@ otool -l "$CHECK/ditto/Markdown Editor.app/Contents/MacOS/MarkdownEditor" | grep
 
 # the checksum file matches, and the page carries the same SHA and no unrendered tokens
 (cd build/dist && shasum -a 256 -c "Markdown-Editor-$V.zip.sha256")
-grep -c "$(shasum -a 256 build/site/Markdown-Editor.zip | cut -d ' ' -f 1)" build/site/index.html
-grep -c '{{' build/site/index.html || true   # expect 0
+SHA="$(shasum -a 256 build/site/Markdown-Editor.zip | cut -d ' ' -f 1)"
+grep -c "$SHA" build/site/index.html                  # expect 2
+grep -c "$SHA" build/site/install.sh                  # expect 1
+grep -c '{{' build/site/index.html build/site/install.sh || true   # expect 0 and 0
+bash -n build/site/install.sh && echo "install.sh parses"
 
-# wrangler accepts the config and sees the files (no login needed)
+# wrangler accepts the config and sees the files (no login needed); expect "Read 8 files"
 (cd site && npx wrangler deploy --dry-run)
 
 rm -rf "$CHECK"
 ```
 
-To look at the page before deploying: `python3 -m http.server 8765 --directory build/site`, then open
-http://127.0.0.1:8765 and check it in light and dark mode and at phone width.
+To look at the page before deploying: `python3 -m http.server 8765 --bind 127.0.0.1 --directory build/site`,
+then open http://127.0.0.1:8765 and check it in light and dark mode and at phone width, and that
+**Copy** copies the one-liner.
+
+**Run the real one-liner against that local server** before deploying. Two settings in `install.sh`
+point it at the local copy and keep it out of `/Applications`:
+
+```sh
+TEST_APPS="$(mktemp -d)/apps"
+MARKDOWN_EDITOR_BASE_URL=http://127.0.0.1:8765 MARKDOWN_EDITOR_INSTALL_DIR="$TEST_APPS" \
+  bash -c 'curl -fsSL http://127.0.0.1:8765/install.sh | bash'
+xattr -lr "$TEST_APPS/Markdown Editor.app" | grep quarantine || echo "no quarantine"
+codesign -dvvv "$TEST_APPS/Markdown Editor.app" 2>&1 | grep CDHash      # = the zip's app
+```
+
+Expect "SHA-256 matches", the app to open with no "Not Opened" dialog, and "Installed Markdown Editor
+<version> to …". `MARKDOWN_EDITOR_BASE_URL` accepts only `https://…` or `http://127.0.0.1:<port>`.
+Afterwards quit the app and unregister the test copy:
+`/System/Library/Frameworks/CoreServices.framework/Frameworks/LaunchServices.framework/Support/lsregister -u "$TEST_APPS/Markdown Editor.app"`.
+`_headers` cannot be checked locally (neither `http.server` nor `wrangler deploy --dry-run` reads
+it); §6 checks it live.
 
 ## 4. Commit
 
@@ -110,11 +148,26 @@ curl -sI https://markdown.chri5tian.com/Markdown-Editor.zip | grep -i content-di
 stat -f %z build/dist/Markdown-Editor.zip     # compare with Content-Length, if it is sent
 curl -s https://markdown.chri5tian.com/Markdown-Editor.zip | shasum -a 256
 curl -s https://markdown.chri5tian.com/ | grep -o "v$V"
+curl -sI https://markdown.chri5tian.com/install.sh   # 200, text/plain, max-age=300, no content-disposition
+curl -s https://markdown.chri5tian.com/install.sh | grep '^SHA256='
 ```
 
-Expect 200 on both, `content-disposition: attachment` on the zip (proves `site/_headers` is live), and the downloaded SHA-256 equal to the one the script printed. Whether Workers
+Expect 200 on all three, `content-disposition: attachment` on the zip (proves `site/_headers` is live), and the downloaded SHA-256 equal to the one the script printed. Whether Workers
 static assets send `Content-Length` is not documented; if the header is missing, the SHA check is the
-one that counts.
+one that counts. `install.sh` must come back as `content-type: text/plain; charset=utf-8` with
+`cache-control: public, max-age=300` and no `content-disposition` (a browser shows it instead of
+downloading it), and its `SHA256=` line must equal the zip's SHA-256.
+
+Then run the real one-liner on this Mac:
+
+```sh
+curl -fsSL https://markdown.chri5tian.com/install.sh | bash
+```
+
+It should print "SHA-256 matches", install to `/Applications/Markdown Editor.app` and open it with no
+"Not Opened" dialog: the app shows a window, `CoreServicesUIAgent` has none
+(`osascript -e 'tell application "System Events" to tell process "CoreServicesUIAgent" to count windows'`
+→ 0), and the installed app has no `com.apple.quarantine` xattr.
 
 Then do one real download in Safari: open the zip, move the app to Applications, double-click, and
 take the Open Anyway path in System Settings. If the wording macOS shows has changed, update the

@@ -13,13 +13,25 @@ Anything beyond that (themes, export, plugins) is out of scope until it's actual
 
 ## Install
 
-Download the zip from **https://markdown.chri5tian.com** (macOS 15 or later, Apple Silicon), unzip it
-and move **Markdown Editor** to Applications.
+On a Mac with Apple Silicon and macOS 15 or later, paste this into Terminal:
 
-The app is signed ad-hoc, not with an Apple Developer ID, and is not notarized, so macOS blocks the
-first launch. Double-click it, click **Done**, then open System Settings › Privacy & Security, scroll
-to Security. Next to the notice that "Markdown Editor" was blocked to protect your Mac, click
-**Open Anyway**. Confirm, authenticate, and it opens normally from then on. The site lists the steps and the zip's SHA-256.
+```sh
+curl -fsSL https://markdown.chri5tian.com/install.sh | bash
+```
+
+It downloads the release zip, checks its SHA-256 against the one written into the script (and stops,
+installing nothing, if they differ), installs **Markdown Editor** to `/Applications` (or
+`~/Applications` if `/Applications` is not writable), replaces and quits any copy already there, and
+opens it. No sudo. Because curl does not mark the download as quarantined, macOS opens it without
+the Open Anyway step (it still runs its usual malware scan). To read the script first:
+`curl -fsSL https://markdown.chri5tian.com/install.sh | less`.
+
+Or download the zip from **https://markdown.chri5tian.com**, unzip it and move **Markdown Editor**
+to Applications. The app is signed ad-hoc, not with an Apple Developer ID, and is not notarized, so
+macOS blocks the first launch of a downloaded copy. Double-click it, click **Done**, then open System
+Settings › Privacy & Security, scroll to Security. Next to the notice that "Markdown Editor" was
+blocked to protect your Mac, click **Open Anyway**. Confirm, authenticate, and it opens normally
+from then on. The site lists the steps and the zip's SHA-256.
 
 ## Building from source
 
