@@ -13,6 +13,13 @@ extension NSAttributedString.Key {
     public static let mdLinkURL = NSAttributedString.Key("md.link")
     /// On an image-only paragraph. Value: `ImageInfo`.
     public static let mdImage = NSAttributedString.Key("md.image")
+    /// On a whole table block. Value: `TableInfo`.
+    public static let mdTable = NSAttributedString.Key("md.table")
+    /// On a table's separator pipes. Value: `NSNumber` — the width the hidden pipe takes, so the
+    /// cells after it line up in columns. Lives on the character, so it moves with edits.
+    public static let mdPipeWidth = NSAttributedString.Key("md.pipeWidth")
+    /// On a table's delimiter row (`|---|---|`), which collapses to a thin strip while hidden.
+    public static let mdTableDelimiter = NSAttributedString.Key("md.tableDelimiter")
 }
 
 /// When a marker is visible: `.span` markers show while the selection touches the span
@@ -65,17 +72,42 @@ public final class ImageInfo: NSObject, @unchecked Sendable {
     public override var hash: Int { source.hashValue ^ lineRange.location }
 }
 
+/// A table's grid geometry, from its cell widths and the column width available.
+public final class TableInfo: NSObject, @unchecked Sendable {
+    public let alignments: [TableAlignment]
+    /// False when a row does not fit the column: the table then shows as source (pipes visible).
+    public let fits: Bool
+    /// The grid's right edge, from the start of each row's line (padding excluded).
+    public let width: CGFloat
+
+    public init(alignments: [TableAlignment], fits: Bool, width: CGFloat) {
+        self.alignments = alignments
+        self.fits = fits
+        self.width = width
+    }
+    public override func isEqual(_ object: Any?) -> Bool {
+        guard let o = object as? TableInfo else { return false }
+        return o.alignments == alignments && o.fits == fits && o.width == width
+    }
+    public override var hash: Int { alignments.count &* 31 &+ Int(width) &+ (fits ? 1 : 0) }
+}
+
 /// Derives display attributes from the markdown text. Styles are always recomputed from the
 /// text (never stored), so undo, reload and external edits need no bookkeeping.
 public struct MarkdownStyler: @unchecked Sendable {
     public var theme: Theme
     /// Extra space (below the line) for an image-only paragraph, keyed by source; set by the editor.
     public var imageSpacing: (ImageInfo) -> CGFloat? = { _ in nil }
+    /// Width a table row may use (the text column minus line padding); set by the editor. Nil or
+    /// 0 (no layout yet): tables are laid out unconstrained, and restyled when the width is known.
+    public var tableWidth: () -> CGFloat? = { nil }
+    /// Space on each side of a column boundary.
+    public static let tableGutter: CGFloat = 12
 
     public init(theme: Theme = Theme()) { self.theme = theme }
 
     private static let managedKeys: [NSAttributedString.Key] = [
-        .mdMarker, .mdHorizontalRule, .mdQuote, .mdCodeBlock, .mdLinkURL, .mdImage,
+        .mdMarker, .mdHorizontalRule, .mdQuote, .mdCodeBlock, .mdLinkURL, .mdImage, .mdTable, .mdPipeWidth, .mdTableDelimiter,
         .strikethroughStyle, .backgroundColor, .underlineStyle, .link, .kern,
     ]
 
@@ -157,12 +189,18 @@ public struct MarkdownStyler: @unchecked Sendable {
         case .bulletItem, .orderedItem, .taskItem:
             // List markers stay visible (dimmed): hiding them makes list editing fragile.
             for m in block.markerRanges { storage.addAttribute(.foregroundColor, value: theme.listMarkerColor, range: m) }
-        case .paragraph, .blank:
+        case .paragraph, .blank, .table:
             break
         }
 
         let inlines = document.inlines(in: block)
+        if let table = block.table {
+            for cell in table.header.cells { addTrait(.bold, cell, storage) }
+        }
         for inline in inlines { styleInline(inline, in: storage) }
+        if case .table(let alignments) = block.kind, let table = block.table {
+            styleTable(block, table, alignments, in: storage)
+        }
 
         // An image alone on its line is drawn below the line with its source hidden.
         if case .paragraph = block.kind, inlines.count == 1, case .image(let source, let alt) = inlines[0].kind,
@@ -175,6 +213,33 @@ public struct MarkdownStyler: @unchecked Sendable {
                 p.paragraphSpacing = spacing
                 storage.addAttribute(.paragraphStyle, value: p, range: r)
             }
+        }
+    }
+
+    // MARK: Tables
+
+    /// Pipes and the delimiter row become `.line` markers (hidden while the caret is outside the
+    /// table), and every separator pipe gets the width that lines its row up in columns. A table
+    /// whose rows cannot fit the column shows as source instead: pipes visible and dimmed.
+    private func styleTable(_ block: Block, _ table: TableLayout, _ alignments: [TableAlignment], in storage: NSTextStorage) {
+        let available = tableWidth().flatMap { $0 > 0 ? $0 : nil } ?? .greatestFiniteMagnitude
+        let geometry = TableGeometry.compute(table, alignments, storage: storage, gutter: Self.tableGutter)
+        let fits = geometry.rowWidths.allSatisfy { $0 <= available - 2 }
+        storage.addAttribute(.mdTable, value: TableInfo(alignments: alignments, fits: fits, width: geometry.width), range: block.range)
+        // Cells past the header's column count are not part of the grid.
+        for row in table.body where row.cells.count > table.columns {
+            for cell in row.cells[table.columns...] {
+                storage.addAttribute(.foregroundColor, value: theme.markerColor, range: cell)
+            }
+        }
+        guard fits else {
+            for m in block.markerRanges { storage.addAttribute(.foregroundColor, value: theme.markerColor, range: m) }
+            return
+        }
+        for m in block.markerRanges { marker(m, .line, block.range, storage) }
+        if table.delimiter.line.length > 0 { storage.addAttribute(.mdTableDelimiter, value: true, range: table.delimiter.line) }
+        for (pipe, width) in geometry.pipeWidths {
+            storage.addAttribute(.mdPipeWidth, value: NSNumber(value: Double(width)), range: NSRange(location: pipe, length: 1))
         }
     }
 

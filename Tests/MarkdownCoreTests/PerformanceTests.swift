@@ -20,6 +20,12 @@ final class PerformanceTests: XCTestCase {
         ```
         ---
 
+        | Model | Job | Notes |
+        |:------|:---:|------:|
+        | **Opus** | Plans and reviews | `x \\| y` |
+        | Sonnet | Executes the plan | 2 |
+        Haiku | Fast | 3
+
         """
         var s = ""
         while s.utf16.count < 200_000 { s += chunk }

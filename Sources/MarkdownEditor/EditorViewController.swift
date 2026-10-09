@@ -105,7 +105,8 @@ final class EditorViewController: NSViewController, NSTextViewDelegate, NSTextSt
         let containerWidth = max(100, width - 2 * horizontal)
         if abs(textContainer.size.width - containerWidth) > 0.5 {
             textContainer.size = NSSize(width: containerWidth, height: CGFloat.greatestFiniteMagnitude)
-            if hasImages { restyleAll() }   // image heights depend on the column width
+            // Image heights and table column fits depend on the column width.
+            if hasImages || hasTables { restyleAll() }
         }
     }
 
@@ -179,11 +180,17 @@ final class EditorViewController: NSViewController, NSTextViewDelegate, NSTextSt
     // MARK: Images
 
     private var hasImages: Bool { textStorage.length > 0 && textStorage.string.contains("![") }
+    private var hasTables: Bool {
+        document.blocks.contains { if case .table = $0.kind { return true } else { return false } }
+    }
 
     /// Width available to an image: the text column minus the line padding.
     var imageWidth: CGFloat { textContainer.size.width - 2 * textContainer.lineFragmentPadding }
 
     private func configureImages() {
+        styler.tableWidth = { [weak self] in
+            MainActor.assumeIsolated { self?.imageWidth }
+        }
         styler.imageSpacing = { [weak self] info in
             MainActor.assumeIsolated {
                 guard let self, let url = ImageCache.resolve(info.source, relativeTo: self.baseURL),
@@ -243,15 +250,10 @@ final class EditorViewController: NSViewController, NSTextViewDelegate, NSTextSt
         while prefix < a.count, prefix < b.count, a[prefix] == b[prefix] { prefix += 1 }
         var suffix = 0
         while suffix < a.count - prefix, suffix < b.count - prefix,
-              shifted(a[a.count - 1 - suffix], by: delta) == b[b.count - 1 - suffix] { suffix += 1 }
+              a[a.count - 1 - suffix].shifted(by: delta) == b[b.count - 1 - suffix] { suffix += 1 }
         let lo = prefix, hi = b.count - 1 - suffix
         guard lo <= hi else { return nil }
         return NSUnionRange(b[lo].range, b[hi].range)
-    }
-
-    private func shifted(_ block: Block, by delta: Int) -> Block {
-        func s(_ r: NSRange) -> NSRange { NSRange(location: r.location + delta, length: r.length) }
-        return Block(kind: block.kind, range: s(block.range), markerRanges: block.markerRanges.map(s), contentRange: s(block.contentRange))
     }
 
     /// Updates which markers are shown for the current selection, re-laying-out only the blocks

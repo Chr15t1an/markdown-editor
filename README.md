@@ -6,7 +6,8 @@ A native macOS markdown editor that renders formatting inline as you type, and o
 
 Typora is the right shape for editing markdown — one pane, WYSIWYG, open any folder with no vault setup — but it's paid ($15 after the trial). Obsidian only works on vaults and VS Code treats markdown as raw text plus a preview pane. This is a small, free, native clone that does just the parts that matter:
 
-- Typora-style inline editing: markdown syntax renders in place while you type, no preview toggle.
+- Typora-style inline editing: markdown syntax renders in place while you type, no preview toggle —
+  including GitHub-style pipe tables.
 - Drag a folder onto the window or the Dock icon and it opens to that folder, with a sidebar file tree.
 
 Anything beyond that (themes, export, plugins) is out of scope until it's actually missed.
@@ -46,11 +47,14 @@ scripts/make-app.sh --install   # same, then copy it to /Applications (quits a r
 The script picks the toolchain itself:
 
 - **Xcode 16** at `/Applications/Xcode.app` (it does not need to be the selected developer
-  directory): builds with `swift build`. Run the test suite with
-  `DEVELOPER_DIR=/Applications/Xcode.app/Contents/Developer swift test`.
+  directory): builds with `swift build`.
 - **Command Line Tools only** (no Xcode): builds with two plain `swiftc` calls against the CLT's
-  `MacOSX.sdk`. `swift test` does not work on this path — XCTest ships with Xcode — so tests need
-  an Xcode install.
+  `MacOSX.sdk`.
+
+Run the tests with `scripts/test.sh` (optionally a filter such as `scripts/test.sh BlockScannerTests`).
+With Xcode it runs `swift test`; with only the Command Line Tools, where `swift test` and XCTest are
+not available, it builds the suite with `swiftc` against a small XCTest stand-in
+(`scripts/test-support/`) and runs it headless.
 
 To cut a release (zip, SHA-256 and the download site), see [`docs/release.md`](docs/release.md).
 
@@ -77,6 +81,10 @@ title bar says "Not saved", and switching away or quitting asks Keep Editing / D
 Editing: ⌘B bold, ⌘I italic, ⌘⇧` code, ⌘⇧X strikethrough, ⌘K link, ⌘1–⌘6 heading, ⌘0 paragraph.
 Return continues a list, task list or quote (Return on an empty item ends it); Tab / ⇧Tab indent
 list items. ⌘-click a link to open it.
+
+Tables (GitHub-style `| a | b |` rows over a `|---|---|` line, `:--:` to center a column) show as
+aligned columns with a rule under the header; put the cursor anywhere in a table to edit its
+markdown, and the columns come back when it leaves. A table too wide for the window stays as text.
 
 ### Folder access prompts (one-time certificate)
 

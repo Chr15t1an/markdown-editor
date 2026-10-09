@@ -1,6 +1,7 @@
 import Foundation
 
-/// Block-level kinds. Each block is one line, except fenced code (fence open through close).
+/// Block-level kinds. Each block is one line, except fenced code (fence open through close) and
+/// tables (header row through the last body row).
 public enum BlockKind: Equatable, Sendable {
     case paragraph
     case heading(level: Int)
@@ -11,6 +12,60 @@ public enum BlockKind: Equatable, Sendable {
     case fencedCode(language: String?)
     case horizontalRule
     case blank
+    /// A GFM pipe table; one alignment per column.
+    case table(alignments: [TableAlignment])
+}
+
+/// Column alignment from a table's delimiter row: `:--` left, `:-:` center, `--:` right.
+public enum TableAlignment: Equatable, Sendable {
+    case none, left, center, right
+}
+
+/// One line of a table, as written.
+public struct TableRow: Equatable, Sendable {
+    /// The line without its terminator.
+    public var line: NSRange
+    /// Locations of the cell-separating pipes (escaped `\|` excluded), leading/trailing included.
+    public var pipes: [Int]
+    /// Cell contents, trimmed of spaces and tabs. A body row may have more or fewer cells than the
+    /// table has columns: missing cells render empty, extra cells are not part of the grid.
+    public var cells: [NSRange]
+
+    public init(line: NSRange, pipes: [Int], cells: [NSRange]) {
+        self.line = line
+        self.pipes = pipes
+        self.cells = cells
+    }
+
+    func shifted(by delta: Int) -> TableRow {
+        TableRow(line: line.shifted(by: delta), pipes: pipes.map { $0 + delta }, cells: cells.map { $0.shifted(by: delta) })
+    }
+}
+
+/// Where a table's rows, pipes and cells are.
+public struct TableLayout: Equatable, Sendable {
+    public var header: TableRow
+    public var delimiter: TableRow
+    public var body: [TableRow]
+
+    public init(header: TableRow, delimiter: TableRow, body: [TableRow]) {
+        self.header = header
+        self.delimiter = delimiter
+        self.body = body
+    }
+
+    public var columns: Int { header.cells.count }
+    /// Header, delimiter, then body rows, in line order.
+    public var rows: [TableRow] { [header, delimiter] + body }
+
+    func shifted(by delta: Int) -> TableLayout {
+        TableLayout(header: header.shifted(by: delta), delimiter: delimiter.shifted(by: delta),
+                    body: body.map { $0.shifted(by: delta) })
+    }
+}
+
+extension NSRange {
+    func shifted(by delta: Int) -> NSRange { NSRange(location: location + delta, length: length) }
 }
 
 public struct Block: Equatable, Sendable {
@@ -19,14 +74,25 @@ public struct Block: Equatable, Sendable {
     public var range: NSRange
     /// Syntax characters: "## ", "- ", "- [ ] ", "> ", fence lines, "---".
     public var markerRanges: [NSRange]
-    /// The text inline parsing runs over (for fenced code: the code body; empty for hr/blank).
+    /// The text inline parsing runs over (for fenced code: the code body; empty for hr/blank;
+    /// for tables: header through last row, but inlines are parsed per cell).
     public var contentRange: NSRange
+    /// Rows and cells, for `.table` blocks only.
+    public var table: TableLayout?
 
-    public init(kind: BlockKind, range: NSRange, markerRanges: [NSRange], contentRange: NSRange) {
+    public init(kind: BlockKind, range: NSRange, markerRanges: [NSRange], contentRange: NSRange,
+                table: TableLayout? = nil) {
         self.kind = kind
         self.range = range
         self.markerRanges = markerRanges
         self.contentRange = contentRange
+        self.table = table
+    }
+
+    /// The same block `delta` code units later in the text.
+    public func shifted(by delta: Int) -> Block {
+        Block(kind: kind, range: range.shifted(by: delta), markerRanges: markerRanges.map { $0.shifted(by: delta) },
+              contentRange: contentRange.shifted(by: delta), table: table?.shifted(by: delta))
     }
 }
 
@@ -64,6 +130,7 @@ enum U {
     static let lbracket: UInt16 = 0x5B, rbracket: UInt16 = 0x5D, lparen: UInt16 = 0x28, rparen: UInt16 = 0x29
     static let bang: UInt16 = 0x21, backslash: UInt16 = 0x5C, dot: UInt16 = 0x2E, x: UInt16 = 0x78, X: UInt16 = 0x58
     static let lt: UInt16 = 0x3C, quote: UInt16 = 0x22, apostrophe: UInt16 = 0x27
+    static let pipe: UInt16 = 0x7C, colon: UInt16 = 0x3A
 
     static func isDigit(_ c: UInt16) -> Bool { c >= 0x30 && c <= 0x39 }
     static func isWhitespace(_ c: UInt16) -> Bool { c == space || c == tab || c == lf || c == cr || c == 0xA0 }

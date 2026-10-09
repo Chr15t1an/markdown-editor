@@ -20,7 +20,13 @@ public struct MarkdownDocument {
         default: break
         }
         if let hit = cache.values[block.range.location] { return hit }
-        let result = InlineScanner.scan(units, in: block.contentRange)
+        let result: [Inline]
+        if let table = block.table {
+            // Cells are split on pipes first, then parsed one by one (GFM): a `**` never spans cells.
+            result = (table.header.cells + table.body.flatMap(\.cells)).flatMap { InlineScanner.scan(units, in: $0) }
+        } else {
+            result = InlineScanner.scan(units, in: block.contentRange)
+        }
         cache.values[block.range.location] = result
         return result
     }
