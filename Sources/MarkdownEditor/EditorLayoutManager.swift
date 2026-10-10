@@ -108,7 +108,7 @@ final class EditorLayoutManager: NSLayoutManager {
     private func markersHidden(at location: Int, in storage: NSTextStorage) -> Bool {
         guard location < storage.length,
               let reveal = storage.attribute(.mdMarker, at: location, effectiveRange: nil) as? MarkerReveal else { return false }
-        return hiding?.isHidden(reveal) ?? true
+        return hiding?.isHidden(reveal, at: location) ?? true
     }
 
     /// Union of the line fragments of `range`, spanning the text container's full width.

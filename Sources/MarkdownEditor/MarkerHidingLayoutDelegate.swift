@@ -15,8 +15,8 @@ final class MarkerHidingLayoutDelegate: NSObject, NSLayoutManagerDelegate {
     /// Ranges of the blocks the selection touches; `.line` markers in them are shown.
     var revealedBlocks: [NSRange] = []
 
-    func isHidden(_ reveal: MarkerReveal) -> Bool {
-        !reveal.isRevealed(selection: selection, blockRanges: revealedBlocks)
+    func isHidden(_ reveal: MarkerReveal, at charIndex: Int) -> Bool {
+        !reveal.isRevealed(at: charIndex, selection: selection, blockRanges: revealedBlocks)
     }
 
     func layoutManager(_ layoutManager: NSLayoutManager,
@@ -33,7 +33,7 @@ final class MarkerHidingLayoutDelegate: NSObject, NSLayoutManagerDelegate {
             let ci = charIndexes[i]
             guard ci < length,
                   let reveal = storage.attribute(.mdMarker, at: ci, effectiveRange: nil) as? MarkerReveal,
-                  isHidden(reveal) else { continue }
+                  isHidden(reveal, at: ci) else { continue }
             if modified == nil { modified = Array(UnsafeBufferPointer(start: props, count: count)) }
             modified![i] = .controlCharacter
         }
@@ -50,7 +50,7 @@ final class MarkerHidingLayoutDelegate: NSObject, NSLayoutManagerDelegate {
                        forControlCharacterAt charIndex: Int) -> NSLayoutManager.ControlCharacterAction {
         guard let storage = layoutManager.textStorage, charIndex < storage.length,
               let reveal = storage.attribute(.mdMarker, at: charIndex, effectiveRange: nil) as? MarkerReveal,
-              isHidden(reveal) else { return action }
+              isHidden(reveal, at: charIndex) else { return action }
         // A table's separator pipe keeps a width (its column padding); `.whitespace` is the only
         // action for which the typesetter asks boundingBoxForControlGlyphAt (research spike C).
         if storage.attribute(.mdPipeWidth, at: charIndex, effectiveRange: nil) != nil { return .whitespace }
@@ -84,7 +84,7 @@ final class MarkerHidingLayoutDelegate: NSObject, NSLayoutManagerDelegate {
         guard chars.length > 0, chars.location < storage.length,
               storage.attribute(.mdTableDelimiter, at: chars.location, effectiveRange: nil) != nil,
               let reveal = storage.attribute(.mdMarker, at: chars.location, effectiveRange: nil) as? MarkerReveal,
-              isHidden(reveal) else { return false }
+              isHidden(reveal, at: chars.location) else { return false }
         let h = Self.hiddenDelimiterHeight
         lineFragmentRect.pointee.size.height = h
         lineFragmentUsedRect.pointee.size.height = min(lineFragmentUsedRect.pointee.height, h)

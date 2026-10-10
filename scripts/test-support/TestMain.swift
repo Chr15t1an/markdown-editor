@@ -64,6 +64,34 @@ enum TestRunner {
         for f in failedTests { print("  FAILED: \(f)") }
         return failedTests.isEmpty ? 0 : 1
     }
+
+    /// The sidebar autosaves expanded folders under "NSOutlineView Items Sidebar:<folder path>"
+    /// (SidebarViewController.setRoot), and every fixture folder has a random suffix, so each run
+    /// would add keys to ~/Library/Preferences/MarkdownCoreTests.plist forever. Drop every key that
+    /// names a fixture folder that no longer exists. A folder still on disk may belong to a run in
+    /// a sibling worktree that is mid-test, so live fixtures are left alone.
+    static func pruneFixtureDefaults() {
+        let marker = "/.build/test-fixtures/"
+        let defaults = UserDefaults.standard
+        let domain = Bundle.main.bundleIdentifier ?? ProcessInfo.processInfo.processName
+        guard let keys = defaults.persistentDomain(forName: domain)?.keys else { return }
+        var pruned = 0
+        for key in keys {
+            guard let hit = key.range(of: marker) else { continue }
+            let start = key[..<hit.lowerBound].lastIndex(of: ":").map { key.index(after: $0) } ?? key.startIndex
+            let name = key[hit.upperBound...].prefix { $0 != "/" }
+            guard !name.isEmpty else { continue }
+            let fixture = String(key[start..<hit.upperBound]) + name
+            if !FileManager.default.fileExists(atPath: fixture) {
+                defaults.removeObject(forKey: key)
+                pruned += 1
+            }
+        }
+        if pruned > 0 {
+            defaults.synchronize()
+            print("Pruned \(pruned) stale fixture preference key\(pruned == 1 ? "" : "s")")
+        }
+    }
 }
 
 @main
@@ -75,6 +103,7 @@ struct Main {
         NSApplication.shared.setActivationPolicy(.prohibited)
         TestRunner.filter = CommandLine.arguments.dropFirst().first
         await runRegisteredTests()
+        TestRunner.pruneFixtureDefaults()
         exit(TestRunner.summary())
     }
 }

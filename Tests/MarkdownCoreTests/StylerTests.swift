@@ -26,7 +26,8 @@ final class StylerTests: XCTestCase {
         XCTAssertTrue(font(s, 4).fontDescriptor.symbolicTraits.contains(.bold))
         XCTAssertFalse(font(s, 0).fontDescriptor.symbolicTraits.contains(.bold))
         XCTAssertEqual(reveal(s, 2)?.scope, .span)
-        XCTAssertEqual(reveal(s, 2)?.range, NSRange(location: 2, length: 5))
+        XCTAssertEqual(reveal(s, 2)?.range(at: 2), NSRange(location: 2, length: 5))
+        XCTAssertEqual(reveal(s, 6)?.range(at: 6), NSRange(location: 2, length: 5))
         XCTAssertEqual(reveal(s, 5)?.scope, .span)
         XCTAssertNil(reveal(s, 4))
     }

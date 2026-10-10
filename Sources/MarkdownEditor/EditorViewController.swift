@@ -228,7 +228,8 @@ final class EditorViewController: NSViewController, NSTextViewDelegate, NSTextSt
         let old = document
         let new = MarkdownDocument(textStorage.string)
         document = new
-        let edited = pendingEdit ?? NSRange(location: 0, length: 0)
+        let hint = pendingEdit
+        let edited = hint ?? NSRange(location: 0, length: 0)
         pendingEdit = nil
         let delta = new.length - old.length
         var range = edited
@@ -236,9 +237,11 @@ final class EditorViewController: NSViewController, NSTextViewDelegate, NSTextSt
         range.location = min(range.location, new.length)
         range.length = min(range.length, new.length - range.location)
         let selection = textView.selectedRanges
-        styler.style(textStorage, document: new, in: range)
+        styler.style(textStorage, document: new, in: range, edited: hint)
         if textView.selectedRanges != selection { textView.selectedRanges = selection }
         updateReveal(force: true)
+        // An edit in a table the selection is not in (e.g. Replace All) aligns it now.
+        styler.alignTables(textStorage, document: new, in: range, revealed: hiding.revealedBlocks)
         resetTypingAttributes()
     }
 
@@ -266,12 +269,35 @@ final class EditorViewController: NSViewController, NSTextViewDelegate, NSTextSt
             blocks = idx.map { document.blocks[$0].range }
         }
         let oldBlocks = hiding.revealedBlocks
-        guard force || selection != hiding.selection || blocks != oldBlocks else { return }
+        let oldSelection = hiding.selection
+        guard force || selection != oldSelection || blocks != oldBlocks else { return }
         hiding.selection = selection
         hiding.revealedBlocks = blocks
         let length = textStorage.length
-        for r in Set((oldBlocks + blocks).map { NSRangeKey($0) }) {
-            let range = NSIntersectionRange(r.range, NSRange(location: 0, length: length))
+        let all = NSRange(location: 0, length: length)
+        // A table revealed before and after (same start: edits inside it keep its start) keeps
+        // every `.line` marker's state; only cell spans at the old and new selection can change,
+        // and a span never leaves its row. Re-laying out just those rows keeps typing in a large
+        // table from re-laying out the whole table (review S2).
+        let ns = textStorage.string as NSString
+        let stillRevealedTables = Set(blocks.filter { r in
+            oldBlocks.contains { $0.location == r.location }
+                && document.blockIndex(containing: r.location).map { document.blocks[$0].table != nil } == true
+        }.map(\.location))
+        var ranges = Set<NSRangeKey>()
+        for r in oldBlocks + blocks {
+            guard stillRevealedTables.contains(r.location) else { ranges.insert(NSRangeKey(r)); continue }
+            for sel in [oldSelection, selection] where sel.location <= length {
+                let line = ns.lineRange(for: NSRange(location: sel.location, length: min(sel.length, length - sel.location)))
+                ranges.insert(NSRangeKey(NSIntersectionRange(line, r)))
+            }
+        }
+        // Tables the selection left get the grid their row edits deferred.
+        for r in oldBlocks where !blocks.contains(where: { $0.location == r.location }) {
+            styler.alignTables(textStorage, document: document, in: NSIntersectionRange(r, all), revealed: blocks)
+        }
+        for r in ranges {
+            let range = NSIntersectionRange(r.range, all)
             guard range.length > 0 else { continue }
             layoutManager.invalidateGlyphs(forCharacterRange: range, changeInLength: 0, actualCharacterRange: nil)
             layoutManager.invalidateLayout(forCharacterRange: range, actualCharacterRange: nil)

@@ -57,5 +57,6 @@ swiftc "${FLAGS[@]}" -module-name MarkdownCoreTests -parse-as-library -I "$OUT" 
   Tests/MarkdownCoreTests/*.swift "$OUT/registry.swift" "$SUPPORT/TestMain.swift" \
   -o "$OUT/MarkdownCoreTests"
 
-# Fixtures land in .build/test-fixtures (fixtureDirectory() in the tests).
+# Fixtures land in .build/test-fixtures (fixtureDirectory() in the tests). At exit the runner drops the
+# MarkdownCoreTests preference keys (sidebar autosave) that name fixture folders no longer on disk.
 exec "$OUT/MarkdownCoreTests" ${FILTER:+"$FILTER"}

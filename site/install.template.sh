@@ -11,7 +11,8 @@
 #      installs nothing.
 #   4. Unzips it and checks the app's code signature.
 #   5. Installs "Markdown Editor.app" into /Applications, or ~/Applications if /Applications is not
-#      writable. A copy already there is replaced; if it is running it is quit first.
+#      writable. The new copy is staged and checked beside the old one first; then a copy already
+#      there is replaced (quit first if it is running).
 #   6. Opens the app and prints where it went.
 # It never uses sudo, never reads from the keyboard, and removes its temporary folder when it exits.
 # Everything runs from `main` on the last line, so a download cut short runs nothing.
@@ -45,7 +46,10 @@ check_platform() {
   os="$(uname -s)"
   [[ "$os" == Darwin ]] || die "$NAME is a Mac app; this installer only runs on macOS (this is $os)."
   arch="$(uname -m)"
-  [[ "$arch" == arm64 ]] || die "$NAME needs an Apple Silicon Mac (this one is $arch). Nothing was installed."
+  # A Terminal running under Rosetta reports x86_64 on Apple Silicon; the sysctl tells the truth.
+  if [[ "$arch" != arm64 && "$(sysctl -n hw.optional.arm64 2>/dev/null || true)" != 1 ]]; then
+    die "$NAME needs an Apple Silicon Mac (this one is $arch). Nothing was installed."
+  fi
   ver="$(sw_vers -productVersion)"
   major="${ver%%.*}"
   [[ "$major" =~ ^[0-9]+$ && "$major" -ge 15 ]] \
@@ -80,7 +84,7 @@ download_and_verify() {
   local got
   say "Downloading $NAME $VERSION from $BASE_URL/$ZIP"
   # ${a[@]+...}: an empty array under `set -u` is an error in macOS's bash 3.2.
-  curl -fsSL ${CURL_OPTS[@]+"${CURL_OPTS[@]}"} -o "$TMP/$ZIP" "$BASE_URL/$ZIP" \
+  curl -fsSL --connect-timeout 15 ${CURL_OPTS[@]+"${CURL_OPTS[@]}"} -o "$TMP/$ZIP" "$BASE_URL/$ZIP" \
     || die "the download failed. Nothing was installed."
   got="$(shasum -a 256 "$TMP/$ZIP" | cut -d ' ' -f 1)"
   if [[ "$got" != "$SHA256" ]]; then
@@ -99,11 +103,11 @@ Nothing was installed. Try again later, or download the zip from $BASE_URL and c
 }
 
 quit_running_copy() {
-  pgrep -x "$EXE" >/dev/null || return 0
+  pgrep -x -U "$UID" "$EXE" >/dev/null || return 0
   say "Quitting the running copy of $NAME"
   osascript -e "quit app \"$NAME\"" >/dev/null 2>&1 || true
   for _ in 1 2 3 4 5 6 7 8 9 10; do
-    pgrep -x "$EXE" >/dev/null || return 0
+    pgrep -x -U "$UID" "$EXE" >/dev/null || return 0
     sleep 0.5
   done
   die "$NAME is still running. Quit it and run this again. Nothing was replaced."
@@ -111,16 +115,44 @@ quit_running_copy() {
 
 install_app() {
   local dest="$DIR/$NAME.app"
-  mkdir -p "$DIR"
+  mkdir -p "$DIR" || die "could not create $DIR. Nothing was installed."
+  # Copy the new app in beside the old one first and check it, so a failure (or Ctrl-C) before the
+  # final swap leaves any existing copy as it was. The EXIT trap removes the staged copy.
+  STAGED="$DIR/.$NAME.app.new.$$"
+  ditto "$APP" "$STAGED" || die "could not copy the app into $DIR. Nothing was installed."
+  codesign --verify --strict "$STAGED" 2>/dev/null \
+    || die "the copy in $DIR does not verify. Nothing was installed."
   quit_running_copy
-  rm -rf "$dest"
-  ditto "$APP" "$dest"
-  codesign --verify --strict "$dest" 2>/dev/null \
-    || die "the installed copy at $dest does not verify; delete it and run this again."
+  # Swap by two renames (old aside, new in). If the second fails or is interrupted, cleanup puts
+  # the old copy back.
+  DEST="$dest"
+  if [[ -e "$dest" ]]; then
+    OLD="$DIR/.$NAME.app.old.$$"
+    mv "$dest" "$OLD" 2>/dev/null || {
+      OLD=""
+      die "could not replace the existing $dest (is it owned by another user?). Delete it yourself, then run this again."
+    }
+  fi
+  mv "$STAGED" "$dest" 2>/dev/null \
+    || die "could not move the new app to $dest. The previous copy was left in place."
+  STAGED=""
+  if [[ -n "$OLD" ]]; then
+    local old="$OLD"
+    OLD=""
+    rm -rf "$old" 2>/dev/null || say "Could not delete the previous copy, now at $old; delete it yourself."
+  fi
+  say "Installed $NAME $VERSION to $dest"
   # Make Launch Services point at this copy, then open it by path: other copies may be registered.
   "$LSREGISTER" -f "$dest" >/dev/null 2>&1 || true
-  open "$dest"
-  say "Installed $NAME $VERSION to $dest"
+  open "$dest" 2>/dev/null || say "Could not open it from here (no window session?); open it from $DIR."
+}
+
+# On exit: remove the temporary folder and any staged copy, and if the swap stopped half-way, put
+# the previous copy back.
+cleanup() {
+  rm -rf "$TMP"
+  [[ -z "$STAGED" ]] || rm -rf "$STAGED"
+  if [[ -n "$OLD" && ! -e "$DEST" ]]; then mv "$OLD" "$DEST" 2>/dev/null || true; fi
 }
 
 main() {
@@ -128,7 +160,8 @@ main() {
   choose_source
   choose_destination
   TMP="$(mktemp -d "${TMPDIR:-/tmp}/markdown-editor.XXXXXX")"
-  trap 'rm -rf "$TMP"' EXIT
+  STAGED="" OLD="" DEST=""
+  trap cleanup EXIT
   download_and_verify
   install_app
 }

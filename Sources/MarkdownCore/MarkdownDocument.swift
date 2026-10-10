@@ -23,12 +23,41 @@ public struct MarkdownDocument {
         let result: [Inline]
         if let table = block.table {
             // Cells are split on pipes first, then parsed one by one (GFM): a `**` never spans cells.
-            result = (table.header.cells + table.body.flatMap(\.cells)).flatMap { InlineScanner.scan(units, in: $0) }
+            result = (table.header.cells + table.body.flatMap(\.cells)).flatMap {
+                InlineScanner.scan(units, in: $0).map(unescapingCellPipes)
+            }
         } else {
             result = InlineScanner.scan(units, in: block.contentRange)
         }
         cache.values[block.range.location] = result
         return result
+    }
+
+    /// Inlines of one table row, parsed cell by cell like `inlines(in:)` does for the whole table.
+    public func inlines(in row: TableRow) -> [Inline] {
+        row.cells.flatMap { InlineScanner.scan(units, in: $0).map(unescapingCellPipes) }
+    }
+
+    /// In a table cell GFM unescapes `\|` before inline parsing, so even inside a code span it
+    /// shows as `|`. Code spans are opaque to the inline scanner, so each `\|` in one becomes an
+    /// `.escape` child here (its backslash is then hidden like any other escape).
+    private func unescapingCellPipes(_ inline: Inline) -> Inline {
+        var inline = inline
+        inline.children = inline.children.map(unescapingCellPipes)
+        guard inline.kind == .code else { return inline }
+        let c = inline.contentRange
+        var i = c.location
+        while i + 1 < c.location + c.length {
+            if units[i] == U.backslash, units[i + 1] == U.pipe {
+                inline.children.append(Inline(kind: .escape, range: NSRange(location: i, length: 2),
+                                              markerRanges: [NSRange(location: i, length: 1)],
+                                              contentRange: NSRange(location: i + 1, length: 1)))
+                i += 2
+            } else {
+                i += 1
+            }
+        }
+        return inline
     }
 
     /// The block holding `location`. A location at the end of a line (before its terminator)

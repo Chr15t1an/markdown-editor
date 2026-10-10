@@ -141,4 +141,102 @@ final class FileStoreTests: XCTestCase {
         }
         XCTAssertEqual(try FileStore.createNew(in: dir).lastPathComponent, "Untitled 2.md")
     }
+
+    // The ⌘N deadlock had two independent guards (see `createNew`'s doc comment); each test below
+    // removes the other guard's help, so losing either one alone fails here — by timeout, not a hang.
+
+    func testCreateExclusivelyDoesNotWaitOnTheCallersOwnPresenter() throws {
+        let dir = try fixtureDirectory("create-own-presenter")
+        defer { try? FileManager.default.removeItem(at: dir) }
+        let existing = dir.appendingPathComponent("Untitled.md").standardizedFileURL
+        try "keep me\n".write(to: existing, atomically: true, encoding: .utf8)
+        let presenter = BusyPresenter(existing)
+        defer { presenter.release() }
+        // Coordinating on the presented file itself, so only excluding the presenter avoids the wait.
+        let result = runWithTimeout(releasing: presenter) { () -> Error? in
+            do { try FileStore.createExclusively(existing, presenter: presenter); return nil } catch { return error }
+        }
+        guard let result else { return XCTFail("createExclusively waited on its own presenter") }
+        XCTAssertEqual((result as? CocoaError)?.code, .fileWriteFileExists)
+        XCTAssertEqual(try String(contentsOf: existing, encoding: .utf8), "keep me\n")
+    }
+
+    func testCreateNewSkipsExistingNamesWithoutCoordinatingOnThem() throws {
+        let dir = try fixtureDirectory("create-skip-presented")
+        defer { try? FileManager.default.removeItem(at: dir) }
+        let existing = dir.appendingPathComponent("Untitled.md").standardizedFileURL
+        try "keep me\n".write(to: existing, atomically: true, encoding: .utf8)
+        let presenter = BusyPresenter(existing)
+        defer { presenter.release() }
+        // No presenter passed: only skipping the existing name avoids waiting on its presenter.
+        let result = runWithTimeout(releasing: presenter) { try? FileStore.createNew(in: dir) }
+        guard let made = result else { return XCTFail("createNew coordinated on an existing, presented note") }
+        XCTAssertEqual(made?.lastPathComponent, "Untitled 2.md")
+        XCTAssertEqual(try String(contentsOf: existing, encoding: .utf8), "keep me\n")
+    }
+
+    /// Runs `body` off the main thread; nil if it has not finished within `timeout`. A stuck
+    /// coordination is then unblocked by releasing the presenter, so the thread still ends.
+    private func runWithTimeout<T: Sendable>(releasing presenter: BusyPresenter, timeout: TimeInterval = 3,
+                                             _ body: @escaping @Sendable () -> T) -> T? {
+        let box = ResultBox<T>()
+        let done = DispatchSemaphore(value: 0)
+        DispatchQueue.global().async {
+            box.value = body()
+            done.signal()
+        }
+        if done.wait(timeout: .now() + timeout) == .timedOut {
+            presenter.release()
+            _ = done.wait(timeout: .now() + timeout)
+            return nil
+        }
+        return box.value
+    }
+}
+
+private final class ResultBox<T>: @unchecked Sendable {
+    private let lock = NSLock()
+    private var _value: T?
+    var value: T? {
+        get { lock.withLock { _value } }
+        set { lock.withLock { _value = newValue } }
+    }
+}
+
+/// A file presenter whose operation queue stays busy until `release()` — like the app's
+/// `FileSession` (queue `.main`) while the main thread is blocked inside a coordination. Any
+/// coordinated access that has to consult it waits until released.
+private final class BusyPresenter: NSObject, NSFilePresenter, @unchecked Sendable {
+    let presentedItemURL: URL?
+    let presentedItemOperationQueue: OperationQueue
+    private let gate = DispatchSemaphore(value: 0)
+    private let lock = NSLock()
+    private var released = false
+
+    init(_ url: URL) {
+        presentedItemURL = url
+        let queue = OperationQueue()
+        queue.maxConcurrentOperationCount = 1
+        presentedItemOperationQueue = queue
+        super.init()
+        let gate = gate
+        queue.addOperation { gate.wait() }
+        NSFileCoordinator.addFilePresenter(self)
+    }
+
+    // The same presenter methods the app's FileSession implements: a coordinated write consults
+    // a presenter that implements them (one that implements none is never waited on).
+    func presentedItemDidChange() {}
+    func presentedItemDidMove(to newURL: URL) {}
+    func accommodatePresentedItemDeletion(completionHandler: @escaping @Sendable (Error?) -> Void) { completionHandler(nil) }
+
+    func release() {
+        let first = lock.withLock { () -> Bool in
+            defer { released = true }
+            return !released
+        }
+        guard first else { return }
+        gate.signal()
+        NSFileCoordinator.removeFilePresenter(self)
+    }
 }

@@ -246,4 +246,68 @@ final class TableEditorTests: XCTestCase {
         for v in col1 { XCTAssertEqual(v, col1[0], accuracy: 0.5) }
         XCTAssertGreaterThan(col1[0], x(e, loc(t, "(newer and longer)")) + 100)
     }
+
+    func testEscapedPipeInCodeSpanHidesItsBackslash() {
+        let text = "| Expr | Meaning |\n| --- | --- |\n| `a \\| b` | a or b |\n| x \\| y | text |\n\nend\n"
+        let e = editor(text)
+        e.textView.setSelectedRange(NSRange(location: loc(text, "end"), length: 0))
+        let codeSlash = loc(text, "\\| b`"), textSlash = loc(text, "\\| y")
+        XCTAssertTrue(hidden(e, codeSlash))              // GFM: `a \| b` shows as a | b
+        XCTAssertFalse(hidden(e, codeSlash + 1))         // the pipe itself stays
+        XCTAssertTrue(hidden(e, textSlash))              // outside a code span: as before
+        // The hidden backslash takes no width, so the next column still lines up.
+        let col1 = ["Meaning", "a or b", "text"].map { x(e, loc(text, $0)) }
+        for v in col1 { XCTAssertEqual(v, col1[0], accuracy: 0.5) }
+        // Caret on the escape: the backslash shows, like any other escape.
+        e.textView.setSelectedRange(NSRange(location: codeSlash + 1, length: 0))
+        XCTAssertFalse(hidden(e, codeSlash))
+        XCTAssertEqual(e.text, text)
+    }
+
+    func testCodeSpanOutsideATableKeepsItsBackslash() {
+        // CommonMark: no escapes inside a code span outside a table.
+        let doc = MarkdownDocument("a `b \\| c` d\n")
+        let code = doc.inlines(in: doc.blocks[0]).first { $0.kind == .code }
+        XCTAssertNotNil(code)
+        XCTAssertEqual(code?.children, [])
+        let table = MarkdownDocument("| `b \\| c` |\n|---|\n")
+        let cell = table.inlines(in: table.blocks[0]).first { $0.kind == .code }
+        XCTAssertEqual(cell?.children.map(\.kind), [.escape])
+        XCTAssertEqual(cell?.children.first?.markerRanges, [NSRange(location: 5, length: 1)])
+    }
+
+    func testMixedLeadingPipesAlignColumnZero() {
+        let cases = [
+            "Name | Score\n--- | ---\n| Ann | 10 |\n| Bartholomew | 7 |\nCy | 3\n\nend\n",
+            "| Name | Score |\n|---|---|\nAnn | 10\n| Bartholomew | 7 |\n\nend\n",
+            "Name | Score\n--- | ---\n  |  Ann | 10 |\n\nend\n",
+        ]
+        for text in cases {
+            let e = editor(text)
+            e.textView.setSelectedRange(NSRange(location: loc(text, "end"), length: 0))
+            let names = ["Name", "Ann", "Bartholomew", "Cy"].filter { loc(text, $0) != NSNotFound }
+            let col0 = names.map { x(e, loc(text, $0)) }
+            let col1 = ["Score", "10", "7", "3"].filter { loc(text, $0) != NSNotFound }.map { x(e, loc(text, $0)) }
+            for v in col0 { XCTAssertEqual(v, col0[0], accuracy: 0.5, text) }
+            for v in col1 { XCTAssertEqual(v, col1[0], accuracy: 0.5, text) }
+            XCTAssertGreaterThan(col1[0] - col0[0], 30, text)
+            // The space after a leading pipe is hidden with the table and shown with it.
+            let pipe = loc(text, "| Ann") == NSNotFound ? loc(text, "| Bartholomew") : loc(text, "| Ann")
+            let afterPipe = pipe == NSNotFound ? loc(text, "|  Ann") + 1 : pipe + 1
+            XCTAssertTrue(hidden(e, afterPipe), text)
+            e.textView.setSelectedRange(NSRange(location: loc(text, "Score"), length: 0))
+            XCTAssertFalse(hidden(e, afterPipe), text)
+            XCTAssertEqual(e.text, text)
+        }
+    }
+
+    func testAllLeadingPipesKeepTheirGutter() {
+        // Not mixed: column 0 still starts a gutter in and no whitespace is hidden.
+        let text = sample
+        let e = editor(text)
+        e.textView.setSelectedRange(NSRange(location: 0, length: 0))
+        XCTAssertFalse(hidden(e, loc(text, "| Opus") + 1))
+        let lineStart = x(e, loc(text, "| Opus"))
+        XCTAssertEqual(x(e, loc(text, "Opus")) - lineStart, MarkdownStyler.tableGutter, accuracy: 0.5)
+    }
 }

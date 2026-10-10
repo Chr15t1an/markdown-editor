@@ -10,18 +10,35 @@ Every command runs from the repo root unless it says otherwise, and works in bas
 
 ## 1. Bump the version
 
+On the branch that carries the release. The build number is derived from `Resources/Info.plist`;
+the new version is the one value you type (replace `X.Y.Z`):
+
 ```sh
-VERSION=0.2.0   # what users see (CFBundleShortVersionString)
-BUILD=2         # always goes up by one (CFBundleVersion)
-/usr/libexec/PlistBuddy -c "Set :CFBundleShortVersionString $VERSION" Resources/Info.plist
-/usr/libexec/PlistBuddy -c "Set :CFBundleVersion $BUILD" Resources/Info.plist
-plutil -lint Resources/Info.plist
+PLIST=Resources/Info.plist
+/usr/libexec/PlistBuddy -c 'Print CFBundleShortVersionString' -c 'Print CFBundleVersion' "$PLIST"   # current version, build
+VERSION=X.Y.Z   # the new version users see (CFBundleShortVersionString)
+BUILD=$(( $(/usr/libexec/PlistBuddy -c 'Print CFBundleVersion' "$PLIST") + 1 ))   # always goes up by one (CFBundleVersion)
+if [ "$VERSION" = X.Y.Z ]; then echo "error: set VERSION to the new version first" >&2; else
+  /usr/libexec/PlistBuddy -c "Set :CFBundleShortVersionString $VERSION" -c "Set :CFBundleVersion $BUILD" "$PLIST"
+  plutil -lint "$PLIST" && git diff "$PLIST"
+fi
 ```
 
-PlistBuddy writes the keys back in sorted order, so the first bump also moves
-`NSDocumentsFolderUsageDescription` two lines down in the diff. That is harmless.
+PlistBuddy writes the keys back in its own order, so every bump also moves
+`NSDocumentsFolderUsageDescription` two lines down in the diff. That is harmless; move it back by
+hand if you want the diff to be just the two version lines.
 
-## 2. Build, zip and render the site
+## 2. Commit and merge
+
+Commit the version bump (and anything else that changed) on that branch and squash-merge it to
+`main` as usual. `build/` is ignored; nothing it holds is committed.
+
+Then build the release in the **main checkout, on the merged `main` commit**, not in a worktree:
+`site/wrangler.jsonc` deploys `../build/site`, the build of whichever checkout you deploy from. A
+packaging run in the task worktree before the merge is fine as a dry run, but it is never the one
+you deploy, because builds are not reproducible (see §3).
+
+## 3. Build, zip and render the site
 
 ```sh
 scripts/package-release.sh
@@ -40,13 +57,18 @@ without a new version): do not rebuild, because a rebuild can change the bytes b
 URL (see below). Package the zip that is already published instead:
 
 ```sh
-RELEASE_ZIP=~/Documents/markdown-editor-releases/0.1.0-952815d7f0ac/Markdown-Editor-0.1.0.zip \
+ls ~/Documents/markdown-editor-releases/   # one folder per published release, saved in §4
+RELEASE_ZIP=~/Documents/markdown-editor-releases/X.Y.Z-0123456789ab/Markdown-Editor-X.Y.Z.zip \
   scripts/package-release.sh
 ```
 
-It copies that zip byte for byte (after checking it holds an ad-hoc-signed `Markdown Editor.app`),
-takes the version from the app inside it, and renders the site from it. The printed SHA-256 must be
-the one already live.
+(Replace `X.Y.Z-0123456789ab` with the live release's folder name, its version plus the first 12
+hex digits of its SHA-256, and `X.Y.Z` with that version.) It copies that zip byte for byte (after
+checking it holds an ad-hoc-signed `Markdown Editor.app` and nothing else, with no `._` / `__MACOSX`
+entries), takes the version from the app inside it, and renders the site from it. It refuses a zip
+whose SHA-256 differs from `EXPECTED_SHA256`, if you set it, or else from the `<zip>.sha256` file
+beside it (the durable copies have one); with neither it warns. The printed SHA-256 must be the one
+already live.
 
 The zip is made with `ditto -c -k --norsrc --keepParent` and pinned mtimes. `--norsrc` matters: the
 default ditto zip carries `._` files that Terminal `unzip` drops inside the bundle, which breaks the
@@ -58,7 +80,7 @@ it ships, and the page is rendered from that same zip, so always deploy the `bui
 run you checked. The release is always signed ad-hoc, whatever is in the builder's keychain; the
 script refuses to zip anything else.
 
-## 3. Check it
+## 4. Check it
 
 ```sh
 V="$(/usr/libexec/PlistBuddy -c 'Print CFBundleShortVersionString' Resources/Info.plist)"
@@ -79,7 +101,7 @@ SHA="$(shasum -a 256 build/site/Markdown-Editor.zip | cut -d ' ' -f 1)"
 grep -c "$SHA" build/site/index.html                  # expect 2
 grep -c "$SHA" build/site/install.sh                  # expect 1
 grep -c '{{' build/site/index.html build/site/install.sh || true   # expect 0 and 0
-bash -n build/site/install.sh && echo "install.sh parses"
+/bin/bash -n build/site/install.sh && echo "install.sh parses"   # macOS's bash 3.2, what users run
 
 # wrangler accepts the config and sees the files (no login needed); expect "Read 8 files"
 (cd site && npx wrangler deploy --dry-run)
@@ -109,10 +131,17 @@ Afterwards quit the app and unregister the test copy:
 `_headers` cannot be checked locally (neither `http.server` nor `wrangler deploy --dry-run` reads
 it); §6 checks it live.
 
-## 4. Commit
+**Save the shipped bytes** before deploying. This folder is what `RELEASE_ZIP` re-renders from and
+what a rollback redeploys; `build/` is wiped by the next packaging run.
 
-Commit the version bump (and anything else that changed) on a branch and merge it to `main` as
-usual. `build/` is ignored; nothing it holds is committed.
+```sh
+V="$(/usr/libexec/PlistBuddy -c 'Print CFBundleShortVersionString' Resources/Info.plist)"
+SHA="$(shasum -a 256 build/site/Markdown-Editor.zip | cut -d ' ' -f 1)"
+SAVE=~/Documents/markdown-editor-releases/"$V-$(printf %.12s "$SHA")"
+mkdir -p "$SAVE" && cp build/dist/Markdown-Editor-"$V".zip build/dist/Markdown-Editor-"$V".zip.sha256 \
+  build/dist/Markdown-Editor.zip "$SAVE"/ && rm -rf "$SAVE/site" && ditto build/site "$SAVE/site" &&
+  diff -r build/site "$SAVE/site" && echo "saved to $SAVE"
+```
 
 ## 5. Deploy
 
@@ -178,8 +207,16 @@ take the Open Anyway path in System Settings. If the wording macOS shows has cha
 - **macOS 15 is untested.** The "macOS 15 or later" claim rests on static evidence: the binary says
   `minos 15.0`, the sources compile against the macOS 15.4 SDK, and there are no availability guards.
   Nobody has launched it on a macOS 15 machine yet.
-- **Rollback:** `cd site && npx wrangler delete markdown-editor-site` removes the Worker and its
-  custom domain. To put an older version back, check out its tag or commit and repeat steps 2 to 5.
+- **Rollback:** redeploy the previous release's saved site (from §4), with the same credentials
+  and `whoami` check as §5, then reinstall with that site's own `install.sh`:
+  `cd site && npx wrangler deploy --assets ~/Documents/markdown-editor-releases/X.Y.Z-0123456789ab/site`,
+  then `bash ~/Documents/markdown-editor-releases/X.Y.Z-0123456789ab/site/install.sh` (the folder
+  name as in §3). Do not rebuild an old commit: there are no release tags, and a rebuild gives a
+  different SHA from the one that was published. `cd site && npx wrangler delete markdown-editor-site` takes the whole site down
+  (Worker and custom domain).
+- **The previous versioned zip goes away.** Each deploy serves only the new
+  `Markdown-Editor-<version>.zip` and `Markdown-Editor.zip`; the old versioned URL returns 404. An
+  old `install.sh` still in a cache then stops with "the download failed. Nothing was installed."
 - **Screenshot:** `site/screenshot.png` (1100×750, 1x) is the page image and the `og:image`. If the UI
   changes, replace it with a shot of a sample notes folder (never real notes) at the same size.
   Capturing the app window with `screencapture -l <window id>` needs the Screen Recording permission

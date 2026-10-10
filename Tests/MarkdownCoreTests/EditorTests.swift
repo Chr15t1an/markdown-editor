@@ -126,3 +126,59 @@ final class EditingTests: XCTestCase {
         XCTAssertEqual(tv.selectedRange(), NSRange(location: 5, length: 0))
     }
 }
+
+/// Markers in blocks after an edit are not restyled; their reveal ranges must follow the edit.
+@MainActor
+final class StaleMarkerOffsetTests: XCTestCase {
+    private func isNull(_ e: EditorViewController, _ char: Int) -> Bool {
+        e.layoutManager.ensureLayout(for: e.textContainer)
+        return MarkerHidingLayoutDelegate.isHiddenGlyph(e.layoutManager, character: char)
+    }
+
+    func testSpanMarkerAfterInsertionFollowsTheEdit() {
+        // "first\n\nsecond\n\na **b** c\n" — the bold span starts at 17.
+        let e = makeEditor("first\n\nsecond\n\na **b** c\n")
+        let tv = e.textView!
+        tv.setSelectedRange(NSRange(location: 5, length: 0))
+        tv.insertText("12345", replacementRange: tv.selectedRange())
+        // Bold span is now 22..<27 ("**b**"); markers at 22, 23, 25, 26.
+        let r = e.textStorage.attribute(.mdMarker, at: 22, effectiveRange: nil) as? MarkerReveal
+        XCTAssertEqual(r?.range(at: 22), NSRange(location: 22, length: 5))
+        // Caret just before the span's old (unshifted) start: markers must stay hidden.
+        tv.setSelectedRange(NSRange(location: 18, length: 0))
+        XCTAssertTrue(isNull(e, 22))
+        XCTAssertTrue(isNull(e, 26))
+        // Caret inside the shifted span: markers shown.
+        tv.setSelectedRange(NSRange(location: 24, length: 0))
+        XCTAssertFalse(isNull(e, 22))
+        XCTAssertFalse(isNull(e, 26))
+    }
+
+    func testSpanMarkerAfterDeletionFollowsTheEdit() {
+        let e = makeEditor("first line\n\na `code` z\n")
+        let tv = e.textView!
+        tv.setSelectedRange(NSRange(location: 5, length: 5))   // " line"
+        tv.insertText("", replacementRange: tv.selectedRange())
+        // "first\n\na `code` z\n": code span 9..<15, backticks at 9 and 14.
+        XCTAssertEqual(e.text, "first\n\na `code` z\n")
+        tv.setSelectedRange(NSRange(location: 16, length: 0))   // on "z", outside the span
+        XCTAssertTrue(isNull(e, 9))
+        XCTAssertTrue(isNull(e, 14))
+        tv.setSelectedRange(NSRange(location: 11, length: 0))
+        XCTAssertFalse(isNull(e, 9))
+        XCTAssertFalse(isNull(e, 14))
+    }
+
+    func testLineMarkerAfterInsertionFollowsTheEdit() {
+        let e = makeEditor("intro\n\n# Head\n\nbody\n")
+        let tv = e.textView!
+        tv.setSelectedRange(NSRange(location: 5, length: 0))
+        tv.insertText(" text that is long", replacementRange: tv.selectedRange())   // +18
+        // "# Head\n" now at 25..<32. Caret in the body paragraph: "#" hidden.
+        let body = (e.text as NSString).range(of: "body").location
+        tv.setSelectedRange(NSRange(location: body + 1, length: 0))
+        XCTAssertTrue(isNull(e, 25))
+        tv.setSelectedRange(NSRange(location: 28, length: 0))
+        XCTAssertFalse(isNull(e, 25))
+    }
+}

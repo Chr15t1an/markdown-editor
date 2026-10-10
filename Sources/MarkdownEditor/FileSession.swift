@@ -101,6 +101,9 @@ final class FileSession: NSObject, NSFilePresenter, @unchecked Sendable {
     }
 
     /// True when the buffer may be dropped: it saved, it was clean, or the user chose to discard.
+    /// A discard puts the editor back to the last saved text at once, so a caller that then stays
+    /// on this note (⌘N whose create fails) never shows the discarded text as if it were clean —
+    /// where the next keystroke would autosave it back.
     @MainActor func prepareToLeave() -> Bool {
         if save() { return true }
         let error = lastSaveError ?? CocoaError(.fileWriteUnknown)
@@ -108,6 +111,7 @@ final class FileSession: NSObject, NSFilePresenter, @unchecked Sendable {
         Self.log.info("unsaved edits to \(self.currentURL?.path ?? "?", privacy: .public) discarded by the user")
         isDirty = false
         lastSaveError = nil
+        editor.load(lastSavedText, selection: editor.textView.selectedRange())
         return true
     }
 

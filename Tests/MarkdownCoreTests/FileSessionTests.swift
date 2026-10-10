@@ -91,6 +91,23 @@ final class FileSessionTests: XCTestCase {
         XCTAssertEqual(editor.text, "B\n")
     }
 
+    func testDiscardRevertsTheEditorToTheSavedText() throws {
+        let a = try file("a.md", "A\n")
+        XCTAssertTrue(session.open(a))
+        try FileManager.default.setAttributes([.posixPermissions: 0o444], ofItemAtPath: a.path)
+        type("thrown away")
+        discardAnswer = true
+        XCTAssertTrue(session.prepareToLeave())
+        // Whatever the caller does next (even nothing), the discarded text is gone from the editor.
+        XCTAssertEqual(editor.text, "A\n")
+        XCTAssertFalse(session.isDirty)
+        XCTAssertEqual(session.currentURL, a)
+        try FileManager.default.setAttributes([.posixPermissions: 0o644], ofItemAtPath: a.path)
+        type("kept")
+        XCTAssertTrue(session.save())
+        XCTAssertEqual(try String(contentsOf: a, encoding: .utf8), "A\nkept")
+    }
+
     func testNoDiscardHandlerMeansNeverDiscard() throws {
         session.confirmDiscard = nil
         let a = try file("a.md", "A\n")
@@ -390,6 +407,27 @@ final class NewNoteTests: XCTestCase {
         XCTAssertEqual(c.session.currentURL, top)
         XCTAssertTrue(c.editor.text.contains("unsaved"))
         c.session.confirmDiscard = { _ in true }
+        c.session.close()
+    }
+
+    func testDiscardThenFailedCreateLeavesTheSavedText() throws {
+        let c = MainWindowController()
+        c.open(dir)
+        c.open(dir.appendingPathComponent("top.md"))
+        let top = dir.appendingPathComponent("top.md").standardizedFileURL
+        c.session.onSaveFailure = { _, _ in }
+        c.session.confirmDiscard = { _ in true }   // Discard Changes
+        c.session.writer = { _, _, _, _ in throw CocoaError(.fileWriteNoPermission) }
+        let tv = c.editor.textView!
+        tv.insertText("discarded", replacementRange: tv.selectedRange())
+        try FileManager.default.setAttributes([.posixPermissions: 0o555], ofItemAtPath: dir.path)
+        defer { try? FileManager.default.setAttributes([.posixPermissions: 0o755], ofItemAtPath: dir.path) }
+        c.newNote()   // the create fails: the folder is read-only
+        if let sheet = c.window?.attachedSheet { c.window?.endSheet(sheet) }
+        XCTAssertFalse(FileManager.default.fileExists(atPath: path("Untitled.md")))
+        XCTAssertEqual(c.session.currentURL, top)
+        XCTAssertEqual(c.editor.text, "top\n", "the discarded text must not stay on screen to be autosaved back")
+        XCTAssertFalse(c.session.isDirty)
         c.session.close()
     }
 }

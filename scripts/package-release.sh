@@ -5,6 +5,8 @@
 #   scripts/package-release.sh                         build a new zip from the sources
 #   RELEASE_ZIP=<path/to/zip> scripts/package-release.sh
 #                                                      no build: package that existing zip as-is
+#   RELEASE_ZIP=<zip> EXPECTED_SHA256=<sha> scripts/package-release.sh
+#                                                      ...and refuse it unless its SHA-256 is <sha>
 #
 # Outputs (all under build/, which is git-ignored):
 #   build/dist/Markdown-Editor-<version>.zip         the release
@@ -19,7 +21,9 @@
 # exact zip it ships, and the page and install.sh are rendered from that zip. To re-render the site
 # for a version that is already published (without changing the bytes behind its versioned URL),
 # pass the published zip as RELEASE_ZIP: it is copied byte for byte, and VERSION comes from the app
-# inside it. It must still be signed ad-hoc.
+# inside it. It must still be signed ad-hoc, hold only "Markdown Editor.app/" with no AppleDouble
+# ("._", __MACOSX) entries, and match EXPECTED_SHA256 if set, else the "<zip>.sha256" file beside it
+# if there is one (the durable copies under ~/Documents/markdown-editor-releases/ have one).
 #
 # The release is always signed ad-hoc, even when the "Markdown Editor Dev" identity exists: the site
 # and README say "signed ad-hoc", and the zip must not depend on whose keychain built it.
@@ -50,6 +54,31 @@ DIST="build/dist"
 
 if [[ -n "$RELEASE_ZIP" ]]; then
   # ------------------------------------------------------------- existing zip: no build
+  # The bytes behind a published versioned URL must not change: check the input is the published zip.
+  GOT_SHA="$(shasum -a 256 "$RELEASE_ZIP" | cut -d ' ' -f 1)"
+  if [[ -n "${EXPECTED_SHA256:-}" ]]; then
+    WANT_SHA="$EXPECTED_SHA256"; WANT_FROM="EXPECTED_SHA256"
+  elif [[ -f "$RELEASE_ZIP.sha256" ]]; then
+    WANT_SHA="$(cut -d ' ' -f 1 "$RELEASE_ZIP.sha256")"; WANT_FROM="$RELEASE_ZIP.sha256"
+  else
+    WANT_SHA=""; WANT_FROM=""
+  fi
+  if [[ -n "$WANT_SHA" && "$GOT_SHA" != "$WANT_SHA" ]]; then
+    echo "error: $RELEASE_ZIP has SHA-256 $GOT_SHA, but $WANT_FROM says $WANT_SHA" >&2; exit 1
+  fi
+  [[ -n "$WANT_SHA" ]] || echo "warning: no EXPECTED_SHA256 and no $RELEASE_ZIP.sha256; make sure $GOT_SHA is the published SHA" >&2
+
+  # ditto -x merges AppleDouble entries back in, so the codesign check below cannot see them, but
+  # Terminal `unzip` extracts them as files inside the bundle and breaks the signature.
+  ENTRIES="$(zipinfo -1 "$RELEASE_ZIP")"
+  if grep -Eq '(^|/)\._|^__MACOSX(/|$)' <<<"$ENTRIES"; then
+    echo "error: $RELEASE_ZIP has AppleDouble (._ / __MACOSX) entries; zip it with ditto --norsrc" >&2; exit 1
+  fi
+  if grep -vq '^Markdown Editor\.app/' <<<"$ENTRIES"; then
+    echo "error: $RELEASE_ZIP holds something besides Markdown Editor.app/:" >&2
+    grep -v '^Markdown Editor\.app/' <<<"$ENTRIES" | head -5 >&2; exit 1
+  fi
+
   CHECK="$(mktemp -d)"
   trap 'rm -rf "$CHECK"' EXIT
   ditto -x -k "$RELEASE_ZIP" "$CHECK"
@@ -123,7 +152,7 @@ render() {  # render <template> <output>
 }
 render site/index.template.html "$SITE_OUT/index.html"
 render site/install.template.sh "$SITE_OUT/install.sh"
-bash -n "$SITE_OUT/install.sh"
+/bin/bash -n "$SITE_OUT/install.sh"   # macOS's bash 3.2: what `curl | bash` runs, whatever is on PATH
 
 cp "$DIST/$ZIP" "$DIST/$LATEST" "$DIST/$ZIP.sha256" "$SITE_OUT/"
 
