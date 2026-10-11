@@ -48,8 +48,9 @@ It prints the version, the zip path and its SHA-256, and leaves:
 
 - `build/dist/Markdown-Editor-<version>.zip` and `.zip.sha256`, plus `build/dist/Markdown-Editor.zip`
   (the same bytes, at the stable "latest" URL);
-- `build/site/`, the whole deployable site: 8 files (`_headers`, `index.html`, `install.sh`,
-  `style.css`, `screenshot.png`, both zips and the `.sha256`). `index.html` and `install.sh` are
+- `build/site/`, the whole deployable site: 13 files (`_headers`, `index.html`, `install.sh`,
+  `style.css`, `screenshot.png`, `screenshot-dark.png`, `app-icon-512.png`, `favicon.svg`,
+  `favicon-32.png`, `apple-touch-icon.png`, both zips and the `.sha256`). `index.html` and `install.sh` are
   rendered from `site/index.template.html` and `site/install.template.sh`.
 
 **Re-rendering a version that is already live** (for example, to ship a page or `install.sh` change
@@ -103,7 +104,7 @@ grep -c "$SHA" build/site/install.sh                  # expect 1
 grep -c '{{' build/site/index.html build/site/install.sh || true   # expect 0 and 0
 /bin/bash -n build/site/install.sh && echo "install.sh parses"   # macOS's bash 3.2, what users run
 
-# wrangler accepts the config and sees the files (no login needed); expect "Read 8 files"
+# wrangler accepts the config and sees the files (no login needed); expect "Read 13 files"
 (cd site && npx wrangler deploy --dry-run)
 
 rm -rf "$CHECK"
@@ -217,7 +218,11 @@ take the Open Anyway path in System Settings. If the wording macOS shows has cha
 - **The previous versioned zip goes away.** Each deploy serves only the new
   `Markdown-Editor-<version>.zip` and `Markdown-Editor.zip`; the old versioned URL returns 404. An
   old `install.sh` still in a cache then stops with "the download failed. Nothing was installed."
-- **Screenshot:** `site/screenshot.png` (1100×750, 1x) is the page image and the `og:image`. If the UI
-  changes, replace it with a shot of a sample notes folder (never real notes) at the same size.
+- **Screenshot:** `site/screenshot.png` (light) and `site/screenshot-dark.png` (2200×1500, the real
+  window at 2x) are the page image; the light one is also the `og:image`. If the UI changes, replace
+  both with shots of a sample notes folder (never real notes) at the same size. Light and dark
+  without touching the system setting: see the design-system skill's platform recipes.
+- **Icons:** `site/favicon.svg`, `favicon-32.png`, `apple-touch-icon.png` and `app-icon-512.png` are
+  built from `brand/` (see `brand/README.md`); rebuild them when the icon changes.
   Capturing the app window with `screencapture -l <window id>` needs the Screen Recording permission
   for the terminal that runs it.
