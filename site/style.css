@@ -63,7 +63,9 @@ pre code { background: none; padding: 0; }
 
 /* ---------- hero */
 .hero { padding: 64px 0 32px; }
-.app-name { margin: 0 0 8px; color: var(--muted); font-weight: 600; letter-spacing: 0.02em; }
+.app-name { margin: 0 0 8px; color: var(--muted); font-weight: 600; letter-spacing: 0.02em;
+  display: flex; align-items: center; gap: 8px; }
+.app-icon { width: 28px; height: 28px; border-radius: 7px; }
 h1 { margin: 0 0 16px; font-size: clamp(2rem, 6vw, 2.9rem); line-height: 1.12; letter-spacing: -0.02em; }
 .lede { margin: 0 0 28px; font-size: 1.12rem; color: var(--muted); max-width: 40em; }
 

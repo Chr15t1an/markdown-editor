@@ -1,0 +1,6 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1024 1024" width="1024" height="1024">
+  <defs><linearGradient id="paper" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#FFFFFF"/><stop offset="1" stop-color="#EEEEF1"/></linearGradient></defs>
+  <rect width="1024" height="1024" fill="url(#paper)"/>
+  <g transform="translate(-124.27,-124.27) scale(1.2427)"><g transform="translate(0,24)"><g stroke="#A1A1A8" stroke-width="30" stroke-linecap="round" fill="none"><line x1="250" y1="300" x2="232" y2="450"/><line x1="310" y1="300" x2="292" y2="450"/><line x1="196" y1="348" x2="346" y2="348"/><line x1="196" y1="402" x2="346" y2="402"/></g><rect x="372" y="282" width="16" height="186" rx="8" fill="#007AFF"/><rect x="414" y="333" width="398" height="84" rx="42" fill="#1D1D1F"/><rect x="212" y="531" width="600" height="34" rx="17" fill="#C9C9CF"/><rect x="212" y="599" width="548" height="34" rx="17" fill="#C9C9CF"/><rect x="212" y="667" width="428" height="34" rx="17" fill="#C9C9CF"/></g></g>
+</svg>

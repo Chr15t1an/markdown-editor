@@ -66,6 +66,8 @@ rm -rf "$APP"
 mkdir -p "$APP/Contents/MacOS" "$APP/Contents/Resources"
 cp "$BIN_DIR/$EXE" "$APP/Contents/MacOS/$EXE"
 cp Resources/Info.plist "$APP/Contents/Info.plist"
+# App icon: built from brand/app-icon.svg (see brand/README.md); CFBundleIconFile = AppIcon.
+cp Resources/AppIcon.icns "$APP/Contents/Resources/AppIcon.icns"
 
 # ---------------------------------------------------------------- sign
 IDENTITIES="$(security find-identity -v -p codesigning 2>/dev/null || true)"

@@ -40,6 +40,8 @@
 	</array>
 	<key>CFBundleExecutable</key>
 	<string>MarkdownEditor</string>
+	<key>CFBundleIconFile</key>
+	<string>AppIcon</string>
 	<key>CFBundleIdentifier</key>
 	<string>com.chri5tian.markdown-editor</string>
 	<key>CFBundleInfoDictionaryVersion</key>
