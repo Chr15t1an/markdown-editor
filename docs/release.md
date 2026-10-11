@@ -8,25 +8,81 @@ version, size and SHA-256 on the page and in the script always describe the zip 
 
 Every command runs from the repo root unless it says otherwise, and works in bash or zsh.
 
-## 1. Bump the version
+## 0. CI release (optional, switched off until set up)
 
-On the branch that carries the release. The build number is derived from `Resources/Info.plist`;
-the new version is the one value you type (replace `X.Y.Z`):
+`.github/workflows/release.yml` can do §3–§6 on a GitHub `macos-26` runner instead of this Mac. It
+never runs by itself: it is started by hand (Actions › Release › Run workflow) and only on `main`.
+One-time setup (secrets, the tap repo, accounts) and the order to switch things on are in
+[`ops/README.md`](../ops/README.md). After §1 and §2 (bump, changelog, merge), a run:
+
+1. checks the three version copies (`scripts/check-version.sh`) and takes the Release notes from
+   the version's `CHANGELOG.md` section (`scripts/changelog-section.sh`); no section, no run;
+2. refuses a version that is already live or already has a GitHub Release, so a re-run can never
+   put new bytes behind a published versioned URL. It fails closed: the run stops unless the site
+   answers a clean 404 for `Markdown-Editor-X.Y.Z.zip` (a manual release has no GitHub Release, and
+   one made before this workflow has no `version.json`), `version.json` doesn't say X.Y.Z, and `gh`
+   answers "release not found" (any other `gh` error stops it too);
+3. runs the tests and fails on any failure not listed in `scripts/known-test-failures.txt`
+   (`scripts/check-test-failures.sh`; the job summary shows the comparison);
+4. builds and packages with `scripts/package-release.sh` (ad-hoc, as here) and tars `build/site/`;
+5. creates a **draft** GitHub Release `vX.Y.Z` pinned to the commit it built (`--target`), holding
+   the zip, its `.sha256` and `site-X.Y.Z.tgz`. The draft is the saved copy of the shipped bytes,
+   the CI counterpart of §4's `~/Documents/markdown-editor-releases/` folder.
+
+Everything after that is off unless its input is ticked, and each needs `deploy_site` in the same run:
+
+| Input | Does | Needs |
+|---|---|---|
+| `deploy_site` | `npx wrangler deploy` from `site/` (§5), then `scripts/check-live-release.sh` polls the live `version.json`, `install.sh` `SHA256=` and the zip's SHA-256 for up to 5 minutes (§6) | `CLOUDFLARE_API_TOKEN`, `CLOUDFLARE_ACCOUNT_ID` secrets |
+| `bump_tap` | `ops/homebrew-tap/bump.sh … --push` to `Chr15t1an/homebrew-tap` | `TAP_TOKEN` secret, the tap repo |
+| `publish_release` | turns the draft into a published Release (only useful once the repo is public) | — |
+| `announce` | `ops/announce/post.py --live` to Bluesky and DEV | their secrets (ops/announce/README.md) |
+| `resume_draft` | after a failed deploy: re-packages the draft's saved zip with `RELEASE_ZIP` (no rebuild) and deploys that | an existing draft for the version |
+
+The tap, publish and announce steps run only after the live check passes.
+
+**If a step after a successful deploy fails** (the live check timing out, the tap push, publish or
+announce), do not re-run the workflow: the guard refuses a version that is already live, with or
+without `resume_draft`. Finish by hand from a checkout of the release commit, after confirming
+`scripts/check-live-release.sh X.Y.Z <sha256>` passes (the SHA is in the job summary and the draft's
+`.sha256` asset): `ops/homebrew-tap/bump.sh X.Y.Z <sha256> <tap-checkout> --push`,
+`gh release edit vX.Y.Z --draft=false`, and `python3 ops/announce/post.py --version X.Y.Z --live`
+(its duplicate check skips platforms that already have the post). A CI build is a
+different set of bytes from any local dry run (builds are not reproducible, §3); the draft Release
+is the identity of a CI release.
+
+**Rollback** from a CI release: download the previous release's `site-X.Y.Z.tgz` from its GitHub
+Release, unpack it, and deploy that folder as in the Notes' rollback step
+(`cd site && npx wrangler deploy --assets <unpacked>/site`). Never rebuild an old commit.
+
+**Cost:** the repo is private, so runs draw on the account's free Actions minutes (macOS minutes
+count at a higher rate); with no payment method on file, usage stops at the quota instead of being
+billed. Once the repo is public, standard runners are free.
+
+## 1. Bump the version and write the changelog
+
+On the branch that carries the release, set the new version (replace `X.Y.Z`; the build number goes
+up by one by itself):
 
 ```sh
-PLIST=Resources/Info.plist
-/usr/libexec/PlistBuddy -c 'Print CFBundleShortVersionString' -c 'Print CFBundleVersion' "$PLIST"   # current version, build
-VERSION=X.Y.Z   # the new version users see (CFBundleShortVersionString)
-BUILD=$(( $(/usr/libexec/PlistBuddy -c 'Print CFBundleVersion' "$PLIST") + 1 ))   # always goes up by one (CFBundleVersion)
-if [ "$VERSION" = X.Y.Z ]; then echo "error: set VERSION to the new version first" >&2; else
-  /usr/libexec/PlistBuddy -c "Set :CFBundleShortVersionString $VERSION" -c "Set :CFBundleVersion $BUILD" "$PLIST"
-  plutil -lint "$PLIST" && git diff "$PLIST"
-fi
+scripts/bump-version.sh X.Y.Z
+git diff Resources/Info.plist Sources/MarkdownCore/MarkdownCore.swift Tests/MarkdownCoreTests/SmokeTests.swift
 ```
 
-PlistBuddy writes the keys back in its own order, so every bump also moves
+The version is written in three places: `Resources/Info.plist` (`CFBundleShortVersionString`, the
+source of truth, and `CFBundleVersion`), `MarkdownCore.version` in
+`Sources/MarkdownCore/MarkdownCore.swift`, and the test that asserts it,
+`Tests/MarkdownCoreTests/SmokeTests.swift`. The script writes all three and then runs
+`scripts/check-version.sh`, which prints each copy and exits 1 if they disagree. Run the check on
+its own any time; the CI release workflow runs it first.
+
+PlistBuddy writes the keys back in its own order, so a bump can also move
 `NSDocumentsFolderUsageDescription` two lines down in the diff. That is harmless; move it back by
 hand if you want the diff to be just the two version lines.
+
+Then add a section for the version at the top of `CHANGELOG.md`, headed `## X.Y.Z — YYYY-MM-DD`,
+whose first line is a one-sentence summary. The GitHub Release notes and the release-note posters
+(`ops/announce/`) use that section verbatim; the CI workflow refuses to run without it.
 
 ## 2. Commit and merge
 
@@ -48,10 +104,11 @@ It prints the version, the zip path and its SHA-256, and leaves:
 
 - `build/dist/Markdown-Editor-<version>.zip` and `.zip.sha256`, plus `build/dist/Markdown-Editor.zip`
   (the same bytes, at the stable "latest" URL);
-- `build/site/`, the whole deployable site: 13 files (`_headers`, `index.html`, `install.sh`,
+- `build/site/`, the whole deployable site: 14 files (`_headers`, `index.html`, `install.sh`, `version.json`,
   `style.css`, `screenshot.png`, `screenshot-dark.png`, `app-icon-512.png`, `favicon.svg`,
-  `favicon-32.png`, `apple-touch-icon.png`, both zips and the `.sha256`). `index.html` and `install.sh` are
-  rendered from `site/index.template.html` and `site/install.template.sh`.
+  `favicon-32.png`, `apple-touch-icon.png`, both zips and the `.sha256`). `index.html`, `install.sh` and
+  `version.json` (the app's update feed, read by Check for Updates) are rendered from
+  `site/index.template.html`, `site/install.template.sh` and `site/version.template.json`.
 
 **Re-rendering a version that is already live** (for example, to ship a page or `install.sh` change
 without a new version): do not rebuild, because a rebuild can change the bytes behind the versioned
@@ -103,8 +160,9 @@ grep -c "$SHA" build/site/index.html                  # expect 2
 grep -c "$SHA" build/site/install.sh                  # expect 1
 grep -c '{{' build/site/index.html build/site/install.sh || true   # expect 0 and 0
 /bin/bash -n build/site/install.sh && echo "install.sh parses"   # macOS's bash 3.2, what users run
+python3 -m json.tool build/site/version.json           # the update feed: {"version": "$V", ...}
 
-# wrangler accepts the config and sees the files (no login needed); expect "Read 13 files"
+# wrangler accepts the config and sees the files (no login needed); expect "Read 14 files"
 (cd site && npx wrangler deploy --dry-run)
 
 rm -rf "$CHECK"
@@ -188,6 +246,7 @@ curl -s https://markdown.chri5tian.com/Markdown-Editor.zip | shasum -a 256
 curl -s https://markdown.chri5tian.com/ | grep -o "v$V"
 curl -sI https://markdown.chri5tian.com/install.sh   # 200, text/plain, max-age=300, no content-disposition
 curl -s https://markdown.chri5tian.com/install.sh | grep '^SHA256='
+curl -s https://markdown.chri5tian.com/version.json    # the update feed: {"version":"$V",...}
 ```
 
 Expect 200 on all three, `content-disposition: attachment` on the zip (proves `site/_headers` is live), and the downloaded SHA-256 equal to the one the script printed. Whether Workers

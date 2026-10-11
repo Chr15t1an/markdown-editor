@@ -16,12 +16,16 @@ import AppKit
 ///   open <path>          open a folder or file
 ///   snapshot <png>       render the window content to a PNG
 ///   dump                 rewrite the state file
+/// The state also carries `alert`: the title of the update sheet on screen ("" when none).
 @MainActor
 final class ProbeLog {
     static let shared = ProbeLog()
     weak var window: MainWindowController?
     private let path: String? = UserDefaults.standard.string(forKey: "ProbeLogPath")
     private var timer: Timer?
+    /// Title of the update-check sheet currently shown (UpdateAlerts), so probes can assert on it:
+    /// sheets are separate windows and do not appear in `snapshot`.
+    private(set) var alert = ""
 
     var isEnabled: Bool { path != nil }
 
@@ -35,9 +39,15 @@ final class ProbeLog {
 
     func dump() {
         guard let path, let window else { return }
-        let state = window.probeState()
+        var state = window.probeState()
+        state["alert"] = alert
         guard let data = try? JSONSerialization.data(withJSONObject: state, options: [.prettyPrinted, .sortedKeys]) else { return }
         try? data.write(to: URL(fileURLWithPath: path))
+    }
+
+    func alertShown(_ title: String) {
+        alert = title
+        dump()
     }
 
     private func poll() {

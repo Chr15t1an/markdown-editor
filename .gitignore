@@ -13,3 +13,9 @@ xcuserdata/
 # wrangler
 .wrangler/
 node_modules/
+
+# ops/lists/prepare.py output (prepared PRs, never committed)
+ops/lists/out/
+
+# ops/metrics/collect.py output (tracked in the ops repo, not here)
+ops/metrics/data/

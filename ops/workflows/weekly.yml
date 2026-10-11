@@ -1,0 +1,48 @@
+# TEMPLATE — not active. GitHub only runs workflows under .github/workflows/, and this file is not
+# there. It moves to the machine account's private ops repo (as .github/workflows/weekly.yml, with
+# ops/metrics/ beside it) at switch-on; see ops/README.md. Scheduled workflows in a public repo are
+# disabled after 60 days without commits, which is why it does not live in the app's repo.
+#
+# Every Monday: collect GitHub stars/traffic (traffic is kept by GitHub for 14 days only) and commit
+# the data file to the ops repo.
+name: Weekly metrics
+
+on:
+  schedule:
+    - cron: "17 9 * * 1"   # Mondays 09:17 UTC
+  workflow_dispatch:
+
+permissions:
+  contents: write   # commit ops/metrics/data/github.jsonl to the ops repo itself
+
+concurrency:
+  group: weekly-metrics
+  cancel-in-progress: false
+
+jobs:
+  metrics:
+    runs-on: ubuntu-latest   # Linux minutes: a fraction of macOS
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Collect
+        env:
+          GH_TRAFFIC_TOKEN: ${{ secrets.GH_TRAFFIC_TOKEN }}
+        run: python3 ops/metrics/collect.py
+
+      - name: Commit the data file
+        run: |
+          git add ops/metrics/data/github.jsonl 2>/dev/null || true
+          if git diff --cached --quiet; then echo "nothing new"; exit 0; fi
+          git -c user.name="markdown-editor metrics" \
+              -c user.email="41898282+github-actions[bot]@users.noreply.github.com" \
+              commit -m "metrics: $(date -u +%Y-%m-%d)"
+          git push
+
+      # Not built yet — each is a switch-on step in ops/README.md:
+      # - Content refresh: at most one comparison page a month, only when its facts changed
+      #   (claude-code-action with an Anthropic key; never touch dates without a content change).
+      # - List PR follow-up: check the five curated-list PRs (ops/lists/README.md) and reply only to
+      #   review comments on them.
+      # - Search Console / Bing / Cloudflare collectors (ops/metrics/collect.py stubs).

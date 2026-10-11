@@ -1,0 +1,219 @@
+# Release Markdown Editor: test, package, draft a GitHub Release and — only when asked, and only
+# when the secrets exist — deploy the site, bump the Homebrew tap, publish the Release and post the
+# release note. Manual trigger only (Actions › Release › Run workflow, on main); nothing here runs by
+# itself. Every outward input defaults to false. Setup and switch-on order: ops/README.md.
+#
+# Rules this workflow keeps (docs/release.md):
+# - The bytes behind a published versioned URL never change: it refuses a version that already has
+#   a Release or is already live, and a resumed run re-deploys the draft's saved zip, never a rebuild.
+# - Tap, announce and publish run only in the same run as a deploy, after the live site is checked
+#   to serve this exact version and SHA-256.
+name: Release
+
+on:
+  workflow_dispatch:
+    inputs:
+      deploy_site:
+        description: Deploy build/site to markdown.chri5tian.com (needs CLOUDFLARE_API_TOKEN, CLOUDFLARE_ACCOUNT_ID)
+        type: boolean
+        default: false
+      bump_tap:
+        description: Bump the cask in Chr15t1an/homebrew-tap (needs deploy_site and TAP_TOKEN)
+        type: boolean
+        default: false
+      publish_release:
+        description: Publish the draft GitHub Release (needs deploy_site; only useful once the repo is public)
+        type: boolean
+        default: false
+      announce:
+        description: Post the CHANGELOG section to Bluesky and DEV (needs deploy_site and their secrets)
+        type: boolean
+        default: false
+      resume_draft:
+        description: Re-deploy an existing draft Release's saved zip instead of building (after a failed deploy)
+        type: boolean
+        default: false
+
+permissions:
+  contents: write
+
+concurrency:
+  group: release
+  cancel-in-progress: false
+
+defaults:
+  run:
+    shell: bash   # bash -eo pipefail: a failing check-version.sh | tail must stop the job
+
+jobs:
+  release:
+    if: github.ref == 'refs/heads/main'
+    runs-on: macos-26
+    timeout-minutes: 30
+    env:
+      SITE_URL: https://markdown.chri5tian.com
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false   # npx wrangler runs later; leave no token in .git/config
+
+      - name: Check inputs
+        env:
+          DEPLOY: ${{ inputs.deploy_site }}
+          TAP: ${{ inputs.bump_tap }}
+          PUBLISH: ${{ inputs.publish_release }}
+          ANNOUNCE: ${{ inputs.announce }}
+        run: |
+          if [[ "$DEPLOY" != true && ( "$TAP" == true || "$PUBLISH" == true || "$ANNOUNCE" == true ) ]]; then
+            echo "::error::bump_tap, publish_release and announce need deploy_site in the same run"
+            exit 1
+          fi
+
+      - name: Version
+        id: version
+        run: |
+          VERSION="$(scripts/check-version.sh | tail -n 1)"
+          echo "version=$VERSION" >> "$GITHUB_OUTPUT"
+          echo "Version: $VERSION" >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Release notes from CHANGELOG.md
+        env:
+          VERSION: ${{ steps.version.outputs.version }}
+        run: |
+          mkdir -p build
+          scripts/changelog-section.sh "$VERSION" > build/release-notes.md
+          cat build/release-notes.md
+
+      - name: Refuse a version that is already released
+        id: guard
+        env:
+          VERSION: ${{ steps.version.outputs.version }}
+          RESUME: ${{ inputs.resume_draft }}
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          # Fail closed: anything but a clean 404 for this version's zip means it may already be
+          # live (a manual release has no GitHub Release, and an older one has no version.json).
+          zip_status="$(/usr/bin/curl -s -o /dev/null -I -w '%{http_code}' --max-time 30 \
+            "$SITE_URL/Markdown-Editor-$VERSION.zip" || true)"
+          echo "live Markdown-Editor-$VERSION.zip: HTTP $zip_status"
+          if [[ "$zip_status" != 404 ]]; then
+            echo "::error::$SITE_URL/Markdown-Editor-$VERSION.zip answered HTTP $zip_status (not 404): $VERSION may already be live, or the site could not be checked. Bump the version (scripts/bump-version.sh) or re-run once the site answers."
+            exit 1
+          fi
+          live="$(/usr/bin/curl -fsS --max-time 30 "$SITE_URL/version.json" 2>/dev/null \
+            | python3 -c 'import json,sys; print(json.load(sys.stdin).get("version",""))' 2>/dev/null || true)"
+          echo "live version.json: ${live:-none}"
+          if [[ "$live" == "$VERSION" ]]; then
+            echo "::error::$SITE_URL already serves $VERSION; bump the version (scripts/bump-version.sh)"
+            exit 1
+          fi
+          if draft="$(gh release view "v$VERSION" --json isDraft --jq .isDraft 2>"$RUNNER_TEMP/gh-view.err")"; then
+            if [[ "$RESUME" == true && "$draft" == true ]]; then
+              echo "mode=resume" >> "$GITHUB_OUTPUT"; exit 0
+            fi
+            echo "::error::Release v$VERSION already exists (draft: $draft). Bump the version, or run with resume_draft to re-deploy a draft's saved zip."
+            exit 1
+          fi
+          if ! grep -qi 'release not found' "$RUNNER_TEMP/gh-view.err"; then
+            echo "::error::could not tell whether Release v$VERSION exists: $(cat "$RUNNER_TEMP/gh-view.err")"
+            exit 1
+          fi
+          if [[ "$RESUME" == true ]]; then
+            echo "::error::resume_draft: there is no draft Release v$VERSION"
+            exit 1
+          fi
+          echo "mode=build" >> "$GITHUB_OUTPUT"
+
+      - name: Tests (known failures allowlisted in scripts/known-test-failures.txt)
+        run: scripts/check-test-failures.sh
+
+      - name: Build and package
+        if: steps.guard.outputs.mode == 'build'
+        run: scripts/package-release.sh
+
+      - name: Package the draft's saved zip (no build)
+        if: steps.guard.outputs.mode == 'resume'
+        env:
+          VERSION: ${{ steps.version.outputs.version }}
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          mkdir -p build/draft
+          gh release download "v$VERSION" --dir build/draft \
+            --pattern "Markdown-Editor-$VERSION.zip" --pattern "Markdown-Editor-$VERSION.zip.sha256"
+          RELEASE_ZIP="build/draft/Markdown-Editor-$VERSION.zip" scripts/package-release.sh
+
+      - name: Site tarball
+        id: package
+        env:
+          VERSION: ${{ steps.version.outputs.version }}
+        run: |
+          SHA256="$(cut -d ' ' -f 1 "build/dist/Markdown-Editor-$VERSION.zip.sha256")"
+          tar -czf "build/site-$VERSION.tgz" -C build site
+          echo "sha256=$SHA256" >> "$GITHUB_OUTPUT"
+          echo "SHA-256: \`$SHA256\`" >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Draft GitHub Release
+        if: steps.guard.outputs.mode == 'build'
+        env:
+          VERSION: ${{ steps.version.outputs.version }}
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh release create "v$VERSION" --draft --target "$GITHUB_SHA" \
+            --title "Markdown Editor $VERSION" --notes-file build/release-notes.md \
+            "build/dist/Markdown-Editor-$VERSION.zip" "build/dist/Markdown-Editor-$VERSION.zip.sha256" \
+            "build/site-$VERSION.tgz"
+          echo "Draft Release v$VERSION created at $GITHUB_SHA" >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Deploy the site
+        if: inputs.deploy_site
+        working-directory: site
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+        run: |
+          if [[ -z "$CLOUDFLARE_API_TOKEN" || -z "$CLOUDFLARE_ACCOUNT_ID" ]]; then
+            echo "::error::deploy_site needs the CLOUDFLARE_API_TOKEN and CLOUDFLARE_ACCOUNT_ID secrets (ops/README.md)"
+            exit 1
+          fi
+          npx --yes wrangler@4.149.0 deploy
+
+      - name: Check the live site serves this release
+        if: inputs.deploy_site
+        env:
+          VERSION: ${{ steps.version.outputs.version }}
+          SHA256: ${{ steps.package.outputs.sha256 }}
+        run: scripts/check-live-release.sh "$VERSION" "$SHA256" "$SITE_URL"
+
+      - name: Check out the Homebrew tap
+        if: inputs.deploy_site && inputs.bump_tap
+        uses: actions/checkout@v4
+        with:
+          repository: Chr15t1an/homebrew-tap
+          token: ${{ secrets.TAP_TOKEN }}
+          path: tap
+
+      - name: Bump the Homebrew tap
+        if: inputs.deploy_site && inputs.bump_tap
+        env:
+          VERSION: ${{ steps.version.outputs.version }}
+          SHA256: ${{ steps.package.outputs.sha256 }}
+        run: ops/homebrew-tap/bump.sh "$VERSION" "$SHA256" tap --push
+
+      - name: Publish the GitHub Release
+        if: inputs.deploy_site && inputs.publish_release
+        env:
+          VERSION: ${{ steps.version.outputs.version }}
+          GH_TOKEN: ${{ github.token }}
+        run: gh release edit "v$VERSION" --draft=false
+
+      - name: Post the release note
+        if: inputs.deploy_site && inputs.announce
+        env:
+          VERSION: ${{ steps.version.outputs.version }}
+          BLUESKY_HANDLE: ${{ secrets.BLUESKY_HANDLE }}
+          BLUESKY_APP_PASSWORD: ${{ secrets.BLUESKY_APP_PASSWORD }}
+          BLUESKY_PDS: ${{ vars.BLUESKY_PDS }}
+          DEV_API_KEY: ${{ secrets.DEV_API_KEY }}
+        # Mastodon is built but off (mastodon.social bans solely AI-written posts): add it to --only
+        # and pass MASTODON_INSTANCE / MASTODON_TOKEN only once sections are human-reviewed.
+        run: python3 ops/announce/post.py --version "$VERSION" --only bluesky,dev --live

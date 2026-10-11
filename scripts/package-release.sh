@@ -13,8 +13,8 @@
 #   build/dist/Markdown-Editor-<version>.zip.sha256  `shasum -a 256 -c` format
 #   build/dist/Markdown-Editor.zip                   version-free copy for the stable "latest" URL
 #   build/site/                                      the deployable site (see site/wrangler.jsonc),
-#                                                    incl. index.html and install.sh rendered from
-#                                                    site/index.template.html and site/install.template.sh
+#                                                    incl. index.html, install.sh and version.json (the
+#                                                    app's update feed) rendered from site/*.template.*
 #
 # Builds are not bit-for-bit reproducible: the compiled binary's LC_UUID can differ between runs, so
 # two runs on the same sources can give different zip SHAs. Each release publishes the SHA-256 of the
@@ -124,15 +124,15 @@ fi
 SHA256="$(cut -d ' ' -f 1 "$DIST/$ZIP.sha256")"
 
 # --------------------------------------------------------------- site
-# Everything in site/ except the templates and the wrangler config is copied as-is; index.html and
-# install.sh are rendered from their templates so version, size and SHA always describe the zip
-# deployed beside them.
+# Everything in site/ except the templates and the wrangler config is copied as-is; index.html,
+# install.sh and version.json are rendered from their templates so version, size and SHA always
+# describe the zip deployed beside them.
 SITE_OUT="build/site"
 rm -rf "$SITE_OUT" && mkdir -p "$SITE_OUT"
 for f in site/*; do  # not dotfiles: wrangler keeps a .wrangler/ cache here
   [[ -e "$f" ]] || continue
   case "$(basename "$f")" in
-    index.template.html|install.template.sh|wrangler.jsonc) ;;
+    index.template.html|install.template.sh|version.template.json|wrangler.jsonc) ;;
     *) cp -R "$f" "$SITE_OUT/" ;;
   esac
 done
@@ -153,6 +153,9 @@ render() {  # render <template> <output>
 render site/index.template.html "$SITE_OUT/index.html"
 render site/install.template.sh "$SITE_OUT/install.sh"
 /bin/bash -n "$SITE_OUT/install.sh"   # macOS's bash 3.2: what `curl | bash` runs, whatever is on PATH
+# The app's update feed (UpdateChecker). plutil -lint rejects JSON; json.tool validates it.
+render site/version.template.json "$SITE_OUT/version.json"
+python3 -m json.tool "$SITE_OUT/version.json" >/dev/null
 
 cp "$DIST/$ZIP" "$DIST/$LATEST" "$DIST/$ZIP.sha256" "$SITE_OUT/"
 

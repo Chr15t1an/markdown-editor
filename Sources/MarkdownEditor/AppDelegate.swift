@@ -7,11 +7,14 @@ import UniformTypeIdentifiers
     func newDocument(_ sender: Any?)
     func openDocument(_ sender: Any?)
     func saveDocument(_ sender: Any?)
+    func checkForUpdates(_ sender: Any?)
+    func toggleAutomaticUpdateChecks(_ sender: Any?)
 }
 
 @MainActor
-final class AppDelegate: NSObject, NSApplicationDelegate, EditorMenuActions {
+final class AppDelegate: NSObject, NSApplicationDelegate, EditorMenuActions, NSMenuItemValidation {
     private var windowController: MainWindowController?
+    private var updateChecker: UpdateChecker?
     /// URLs delivered by Launch Services before the window exists.
     private var pendingURLs: [URL] = []
     private var didFinishLaunching = false
@@ -35,6 +38,24 @@ final class AppDelegate: NSObject, NSApplicationDelegate, EditorMenuActions {
         ProbeLog.shared.start()
         ProbeLog.shared.dump()
         NSApp.activate()
+        startUpdateChecker()
+    }
+
+    /// Off until the user says yes (one-time sheet on the second launch); see UpdateChecker.
+    private func startUpdateChecker() {
+        let checker = UpdateChecker(feedURL: UpdateChecker.resolveFeedURL(),
+                                    currentVersion: UpdateChecker.bundleVersion())
+        let alerts = UpdateAlerts(
+            window: { [weak self] in self?.windowController?.window },
+            openURL: { NSWorkspace.shared.open($0) },
+            answer: { [weak checker] enabled in
+                guard let checker else { return }
+                Task { @MainActor in await checker.answerAutomaticQuestion(enabled) }
+            })
+        checker.present = { alerts.present($0) }
+        updateChecker = checker
+        guard !UserDefaults.standard.bool(forKey: UpdateChecker.disabledKey) else { return }
+        Task { @MainActor in await checker.handleLaunch() }
     }
 
     /// Dock-icon drop, Finder "Open With", `open -a "Markdown Editor" <path>`, Open Recent.
@@ -74,6 +95,29 @@ final class AppDelegate: NSObject, NSApplicationDelegate, EditorMenuActions {
     }
 
     @objc func saveDocument(_ sender: Any?) { windowController?.save() }
+
+    /// App menu › Check for Updates…: always fetches and always reports.
+    @objc func checkForUpdates(_ sender: Any?) {
+        guard let checker = updateChecker else { return }
+        Task { @MainActor in await checker.checkNow() }
+    }
+
+    /// App menu › Check for Updates Automatically (a checkmark item).
+    @objc func toggleAutomaticUpdateChecks(_ sender: Any?) {
+        guard let checker = updateChecker else { return }
+        let enabled = !checker.automaticChecksEnabled
+        Task { @MainActor in await checker.answerAutomaticQuestion(enabled) }
+    }
+
+    /// Only the automatic-check item needs state; every other delegate action stays enabled.
+    func validateMenuItem(_ menuItem: NSMenuItem) -> Bool {
+        if menuItem.action == #selector(toggleAutomaticUpdateChecks(_:)) {
+            menuItem.state = updateChecker?.automaticChecksEnabled == true ? .on : .off
+            return updateChecker != nil
+        }
+        if menuItem.action == #selector(checkForUpdates(_:)) { return updateChecker != nil }
+        return true
+    }
 
     func open(_ url: URL) { windowController?.open(url) }
 }

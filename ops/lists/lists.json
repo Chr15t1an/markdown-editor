@@ -1,0 +1,128 @@
+{
+  "_comment": "Curated-list entries for ops/lists/prepare.py. Formats taken from each list's README / CONTRIBUTING / PR template on 2026-10-10. One PR per list, ever.",
+  "app": {
+    "name": "Markdown Editor",
+    "repo_url": "https://github.com/Chr15t1an/markdown-editor",
+    "site": "https://markdown.chri5tian.com/"
+  },
+  "targets": [
+    {
+      "repo": "jaywcjlove/awesome-swift-macos-apps",
+      "branch": "main",
+      "why": "Swift-only list with fast merges; best fit.",
+      "pr_title": "Add Markdown Editor",
+      "edits": [
+        {
+          "file": "README.md",
+          "section": "### Markdown",
+          "placement": "end",
+          "entry": "- [Markdown Editor](https://github.com/Chr15t1an/markdown-editor) <img align=\"bottom\" height=\"13\" src=\"https://badgen.net/github/stars/Chr15t1an/markdown-editor?style=flat&label=\" /> <img align=\"bottom\" height=\"13\" src=\"https://img.shields.io/github/last-commit/Chr15t1an/markdown-editor?style=flat&label=\" /> - Native Markdown editor that renders formatting inline as you type and opens any folder as a sidebar file tree."
+        },
+        {
+          "file": "README.zh.md",
+          "section": "### Markdown",
+          "placement": "end",
+          "entry": "- [Markdown Editor](https://github.com/Chr15t1an/markdown-editor) <img align=\"bottom\" height=\"13\" src=\"https://badgen.net/github/stars/Chr15t1an/markdown-editor?style=flat&label=\" /> <img align=\"bottom\" height=\"13\" src=\"https://img.shields.io/github/last-commit/Chr15t1an/markdown-editor?style=flat&label=\" /> - 原生 Markdown 编辑器，输入时即时渲染格式，并可将任意文件夹作为侧边栏文件树打开。"
+        }
+      ],
+      "pr_body": "Adds Markdown Editor to **Editors › Markdown** in README.md and README.zh.md.\n\n**[Markdown Editor](https://markdown.chri5tian.com/)** (https://github.com/Chr15t1an/markdown-editor) is a free, MIT-licensed, native macOS Markdown editor (Swift/AppKit, no Electron or web view). Markdown renders inline as you type — one pane, no preview toggle, including GitHub pipe tables — and any folder you drop on it opens as a sidebar file tree of plain `.md` files. Apple Silicon, macOS 15+.\n\nDisclosure: I'm the author of Markdown Editor. This entry and PR text were prepared with AI assistance and checked against the list's contribution guidelines."
+    },
+    {
+      "repo": "jaywcjlove/awesome-mac",
+      "branch": "master",
+      "why": "Largest Mac list; welcomes AI-assisted PRs; slow (1,000+ open PRs).",
+      "pr_title": "Add Markdown Editor to Markdown Tools",
+      "edits": [
+        {
+          "file": "README.md",
+          "section": "### Markdown Tools",
+          "placement": "alphabetical",
+          "entry": "* [Markdown Editor](https://markdown.chri5tian.com/) - Free, native Markdown editor that renders formatting inline as you type and opens any folder as a file tree. [![Open-Source Software][OSS Icon]](https://github.com/Chr15t1an/markdown-editor) ![Freeware][Freeware Icon]"
+        },
+        {
+          "file": "README-zh.md",
+          "section": "### Markdown",
+          "placement": "alphabetical",
+          "entry": "* [Markdown Editor](https://markdown.chri5tian.com/) - 免费的原生 Markdown 编辑器，输入时即时渲染格式，可将任意文件夹作为文件树打开。 [![Open-Source Software][OSS Icon]](https://github.com/Chr15t1an/markdown-editor) ![Freeware][Freeware Icon]"
+        },
+        {
+          "file": "README-ja.md",
+          "section": "### Markdownツール",
+          "placement": "alphabetical",
+          "entry": "* [Markdown Editor](https://markdown.chri5tian.com/) - 入力しながら書式をその場で表示する無料のネイティブMarkdownエディタ。任意のフォルダをファイルツリーとして開ける。 [![Open-Source Software][OSS Icon]](https://github.com/Chr15t1an/markdown-editor) ![Freeware][Freeware Icon]"
+        },
+        {
+          "file": "README-ko.md",
+          "section": "### 마크다운 도구",
+          "placement": "alphabetical",
+          "entry": "* [Markdown Editor](https://markdown.chri5tian.com/) - 입력하는 즉시 서식을 인라인으로 렌더링하는 무료 네이티브 마크다운 편집기. 어떤 폴더든 파일 트리로 연다. [![Open-Source Software][OSS Icon]](https://github.com/Chr15t1an/markdown-editor) ![Freeware][Freeware Icon]"
+        }
+      ],
+      "pr_body": "Adds Markdown Editor to **Markdown Tools** in the English, Chinese, Japanese and Korean READMEs, in alphabetical order, with the open-source and freeware icons.\n\n**[Markdown Editor](https://markdown.chri5tian.com/)** (https://github.com/Chr15t1an/markdown-editor) is a free, MIT-licensed, native macOS Markdown editor (Swift/AppKit, no Electron or web view). Markdown renders inline as you type — one pane, no preview toggle, including GitHub pipe tables — and any folder you drop on it opens as a sidebar file tree of plain `.md` files. Apple Silicon, macOS 15+.\n\nDisclosure: I'm the author of Markdown Editor. This entry and PR text were prepared with AI assistance and checked against the list's contribution guidelines. The zh/ja/ko descriptions are machine translations; corrections welcome."
+    },
+    {
+      "repo": "serhii-londar/open-source-mac-os-apps",
+      "branch": "master",
+      "why": "Open-source-only list; edit applications.json, not README.md (CONTRIBUTING).",
+      "pr_title": "Add Markdown Editor",
+      "edits": [
+        {
+          "file": "applications.json",
+          "json_append": {
+            "title": "Markdown Editor",
+            "short_description": "Native Markdown editor that renders formatting inline as you type and opens any folder as a file tree.",
+            "categories": [
+              "markdown",
+              "editors"
+            ],
+            "repo_url": "https://github.com/Chr15t1an/markdown-editor",
+            "icon_url": "https://markdown.chri5tian.com/app-icon-512.png",
+            "screenshots": [
+              "https://markdown.chri5tian.com/screenshot.png"
+            ],
+            "official_site": "https://markdown.chri5tian.com/",
+            "languages": [
+              "swift"
+            ]
+          }
+        }
+      ],
+      "pr_body": "Adds Markdown Editor to applications.json (categories: markdown, editors; language: swift).\n\n**[Markdown Editor](https://markdown.chri5tian.com/)** (https://github.com/Chr15t1an/markdown-editor) is a free, MIT-licensed, native macOS Markdown editor (Swift/AppKit, no Electron or web view). Markdown renders inline as you type — one pane, no preview toggle, including GitHub pipe tables — and any folder you drop on it opens as a sidebar file tree of plain `.md` files. Apple Silicon, macOS 15+.\n\nDisclosure: I'm the author of Markdown Editor. This entry and PR text were prepared with AI assistance and checked against the list's contribution guidelines."
+    },
+    {
+      "repo": "iCHAIT/awesome-macOS",
+      "branch": "master",
+      "why": "Fill its PR template or it is closed; MacDown and Typora live under Utilities.",
+      "pr_title": "Add Markdown Editor",
+      "edits": [
+        {
+          "file": "README.md",
+          "section": "### Utilities",
+          "placement": "alphabetical",
+          "entry": "- [Markdown Editor](https://markdown.chri5tian.com/) - Native Markdown editor that renders formatting inline as you type and opens any folder as a file tree. [![Open-Source Software][OSS Icon]](https://github.com/Chr15t1an/markdown-editor) ![Freeware][Freeware Icon]"
+        }
+      ],
+      "pr_body": "0. [ ] I have read the [Contribution Guidelines](https://github.com/iCHAIT/awesome-macOS/blob/master/.github/contributing.md)\n1. [ ] I confirm that I have read and understood the sections about \"AI\"-adjacent software\n2. [x] Project URL: https://markdown.chri5tian.com/ (source: https://github.com/Chr15t1an/markdown-editor)\n3. [x] Why should this project be added: a free, open-source, native (AppKit, not Electron) Markdown editor with inline rendering and folder-as-file-tree opening; it is not AI software. It sits next to MacDown and Typora in Utilities.\n4. [x] End all descriptions with a full stop/period\n5. [x] Entry is ordered alphabetically\n6. [x] Appropriate icon(s) added if applicable (OSS, freeware)\n\nDisclosure: I'm the author of Markdown Editor. This entry and PR text were prepared with AI assistance and checked against the list's contribution guidelines."
+    },
+    {
+      "repo": "mundimark/awesome-markdown-editors",
+      "branch": "master",
+      "why": "2026 policy: new entries go to UPCOMING.md first, with a source link.",
+      "pr_title": "Add Markdown Editor (macOS) to Upcoming 2026",
+      "edits": [
+        {
+          "file": "UPCOMING.md",
+          "section": "### Apple Mac OS X",
+          "placement": "end",
+          "block": true,
+          "entry": "**Markdown Editor**\n(web: [`markdown.chri5tian.com`](https://markdown.chri5tian.com/), open source @ github [`Chr15t1an/markdown-editor`](https://github.com/Chr15t1an/markdown-editor)) -\nFree, native macOS Markdown editor (Swift/AppKit, not Electron or a webview). Markdown renders inline as you type — one pane, no preview toggle, GitHub pipe tables included — and any folder you drop on it opens as a sidebar file tree of plain `.md` files. MIT licensed."
+        }
+      ],
+      "pr_body": "Adds Markdown Editor to **Upcoming 2026 › Markdown Desktop Editors › Apple Mac OS X**, per the README's 2026 policy, with the source link.\n\n**[Markdown Editor](https://markdown.chri5tian.com/)** (https://github.com/Chr15t1an/markdown-editor) is a free, MIT-licensed, native macOS Markdown editor (Swift/AppKit, no Electron or web view). Markdown renders inline as you type — one pane, no preview toggle, including GitHub pipe tables — and any folder you drop on it opens as a sidebar file tree of plain `.md` files. Apple Silicon, macOS 15+.\n\nDisclosure: I'm the author of Markdown Editor. This entry and PR text were prepared with AI assistance and checked against the list's contribution guidelines."
+    }
+  ],
+  "skip": {
+    "sindresorhus/awesome": "a list of lists, and it bans AI-generated PRs",
+    "awesome-native-macosx-apps": "excludes self-promoted apps"
+  }
+}

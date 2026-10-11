@@ -434,11 +434,17 @@ is the drag or the sidebar.
 
 **Alerts** — `NSAlert` sheets only: open failure ("Couldn’t open “X”"), create failure
 ("Couldn’t create a new note in “X”"), save failure ("Your changes couldn’t be saved", with the
-reason and what happens next), and the critical Keep Editing / Discard Changes choice. Titles
-say what happened; body says why and what to do.
+reason and what happens next), and the critical Keep Editing / Discard Changes choice. The
+update check (`UpdateChecker.swift`) adds four: "Markdown Editor X.Y.Z is available"
+(**Download** / **Skip This Version**: the automatic check shows each version once), "You’re up to date" (**OK**), "Couldn’t check for updates"
+(warning, the reason, **OK**), and once, on the second launch, "Check for updates automatically?"
+(**Check Automatically** / **Don’t Check**). Update sheets never stack: if another sheet is up, an
+automatic notice waits for the next check. Titles say what happened; body says why and what to do.
 
 **Menus** — the standard App / File / Edit / Format / View / Window menus built in code; Format
-holds the markdown actions with their ⌘ shortcuts. No custom menu styling.
+holds the markdown actions with their ⌘ shortcuts. The App menu adds **Check for Updates…** and
+**Check for Updates Automatically** (a checkmark item, off until the user turns it on) under
+About. No custom menu styling.
 
 ## Do's and Don'ts
 

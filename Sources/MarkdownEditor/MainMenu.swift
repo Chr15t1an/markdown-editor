@@ -33,6 +33,8 @@ enum MainMenu {
         let name = "Markdown Editor"
         let menu = NSMenu(title: name)
         menu.addItem(item("About \(name)", #selector(NSApplication.orderFrontStandardAboutPanel(_:))))
+        menu.addItem(item("Check for Updates…", #selector(EditorMenuActions.checkForUpdates(_:))))
+        menu.addItem(item("Check for Updates Automatically", #selector(EditorMenuActions.toggleAutomaticUpdateChecks(_:))))
         menu.addItem(.separator())
         let services = NSMenuItem(title: "Services", action: nil, keyEquivalent: "")
         let servicesMenu = NSMenu(title: "Services")
