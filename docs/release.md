@@ -171,6 +171,14 @@ dashboard.
 ## 6. Verify the live site
 
 ```sh
+scripts/verify-live.sh      # PASS/FAIL per check below; exits non-zero on any failure
+```
+
+It runs every check in this section except the real install, against `build/dist`'s zip (or
+`EXPECTED_SHA256=<sha>` if `build/` is gone), and also checks the icon, favicon and screenshot URLs.
+The checks by hand:
+
+```sh
 V="$(/usr/libexec/PlistBuddy -c 'Print CFBundleShortVersionString' Resources/Info.plist)"
 curl -sI https://markdown.chri5tian.com/ | head -1
 curl -sI https://markdown.chri5tian.com/Markdown-Editor.zip
