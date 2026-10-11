@@ -12,16 +12,16 @@ description: Native macOS markdown editor that renders formatting in place as yo
 colors:
   # Semantic tier only. Light/dark resolve inside AppKit. "Theme.x" = the property in Theme.swift
   # that carries it; roles without a Theme property are system defaults the views inherit.
-  background:          "NSColor.textBackgroundColor"        # editor scroll view (EditorViewController)
+  background:          "NSColor.textBackgroundColor"        # Theme.backgroundColor — editor scroll view
   surface:             "NSSplitViewItem sidebar material"   # sidebar: vibrant source-list material over windowBackgroundColor
   text:                "NSColor.textColor"                  # Theme.textColor — document text
   text-ui:             "NSColor.labelColor"                 # sidebar rows, window title (NSTextField default)
-  text-secondary:      "NSColor.secondaryLabelColor"        # Theme.listMarkerColor, Theme.quoteColor
-  text-tertiary:       "NSColor.tertiaryLabelColor"         # Theme.markerColor — revealed markdown syntax; empty-state label
+  text-secondary:      "NSColor.secondaryLabelColor"        # Theme.listMarkerColor, Theme.quoteColor, Theme.emptyStateColor
+  text-tertiary:       "NSColor.tertiaryLabelColor"         # Theme.markerColor — revealed markdown syntax
   link:                "NSColor.linkColor"                  # Theme.linkColor
   code-background:     "NSColor.quaternarySystemFill"       # Theme.codeBackground — inline code and code blocks
-  divider:             "NSColor.separatorColor"             # quote bar, horizontal rule, table rules (alpha ×2 header, ×0.8 rows)
-  primary:             "NSColor.controlAccentColor"         # the user's accent; drop-target highlight only
+  divider:             "NSColor.separatorColor"             # Theme.dividerColor — quote bar, horizontal rule, table rules (see strokes)
+  primary:             "NSColor.controlAccentColor"         # Theme.accentColor — the user's accent; drop-target highlight only
   selection:           "NSColor.selectedContentBackgroundColor"  # sidebar selected row (system)
   on-selection:        "NSColor.alternateSelectedControlTextColor"
   text-selection:      "NSColor.selectedTextBackgroundColor"     # editor selection (system)
@@ -31,7 +31,8 @@ colors:
 
 typography:
   # Document roles mirror Theme.swift. Family is the system font (SF Pro / SF Mono): Theme uses
-  # NSFont.systemFont / monospacedSystemFont, never a named face.
+  # NSFont.systemFont / monospacedSystemFont, never a named face. Heading lineHeight is
+  # Theme.headingLineHeightMultiple; spaceBefore is Theme.headingSpacingBefore [10, 10, 6, 6, 6, 6].
   document-body:    { fontFamily: "system", fontSize: 15,   fontWeight: 400, lineHeight: 1.35 }   # Theme.bodySize, lineHeightMultiple
   document-h1:      { fontFamily: "system", fontSize: 28,   fontWeight: 600, lineHeight: 1.15, spaceBefore: 10 }   # Theme.headingSizes[0]
   document-h2:      { fontFamily: "system", fontSize: 24,   fontWeight: 600, lineHeight: 1.15, spaceBefore: 10 }
@@ -39,10 +40,10 @@ typography:
   document-h4:      { fontFamily: "system", fontSize: 17,   fontWeight: 600, lineHeight: 1.15, spaceBefore: 6 }
   document-h5:      { fontFamily: "system", fontSize: 15,   fontWeight: 600, lineHeight: 1.15, spaceBefore: 6 }
   document-h6:      { fontFamily: "system", fontSize: 15,   fontWeight: 600, lineHeight: 1.15, spaceBefore: 6 }
-  document-code:    { fontFamily: "system-monospaced", fontSize: 13.5, fontWeight: 400, lineHeight: 1.2 }   # Theme.codeSize; inline code scales 13.5/15 of its run
+  document-code:    { fontFamily: "system-monospaced", fontSize: 13.5, fontWeight: 400, lineHeight: 1.2 }   # Theme.codeSize, codeLineHeightMultiple; inline code scales 13.5/15 of its run
   # UI chrome stays at platform text styles.
   ui-body:          { fontFamily: "system", fontSize: 13,   fontWeight: 400, textStyle: "body" }      # sidebar rows (NSTextField label default)
-  ui-empty-state:   { fontFamily: "system", fontSize: 17,   fontWeight: 400, textStyle: "title2" }    # "Drop a folder here" (EditorViewController)
+  ui-empty-state:   { fontFamily: "system", fontSize: 17,   fontWeight: 400, textStyle: "title2" }    # Theme.emptyStateFont — "Drop a folder here"
 
 spacing:
   base: 4
@@ -51,27 +52,29 @@ spacing:
   md: 16
   lg: 24
   xl: 32
-  # Named layout values in code today (see Overview › Follow-ups for the ones not yet in Theme.swift).
-  editor-inset-horizontal-min: 28     # EditorViewController.minimumInset
-  editor-inset-vertical: 24           # EditorViewController textContainerInset.height
-  content-max-width: 760              # EditorViewController.readableWidth — the reading column
-  list-indent: 20                     # Theme.listIndentPerLevel
+  # Named layout values: each key is its Theme.swift property in kebab case.
+  editor-inset-horizontal-min: 28     # Theme.editorInsetHorizontalMin
+  editor-inset-vertical: 24           # Theme.editorInsetVertical
+  readable-width: 760                 # Theme.readableWidth — the reading column
+  list-indent-per-level: 20           # Theme.listIndentPerLevel
   quote-indent: 16                    # Theme.quoteIndent
-  code-block-indent: 12               # MarkdownStyler.base(.fencedCode)
-  table-gutter: 12                    # MarkdownStyler.tableGutter — each side of a column boundary
-  table-delimiter-strip: 9            # MarkerHidingLayoutDelegate.hiddenDelimiterHeight
-  image-gap: 8                        # ImageCache.gap
-  image-max-height: 480               # ImageCache.maxHeight
-  sidebar-icon: 16                    # SidebarViewController cell
-  sidebar-icon-gap: 6
-  sidebar-min-width: 180              # MainWindowController split items
-  sidebar-max-width: 420
-  editor-min-width: 320
-  window-default: { width: 1100, height: 750 }
+  code-block-indent: 12               # Theme.codeBlockIndent
+  code-block-padding: 2               # Theme.codeBlockPadding — fill extends this far above and below the text
+  table-gutter: 12                    # Theme.tableGutter — each side of a column boundary
+  table-delimiter-strip-height: 9     # Theme.tableDelimiterStripHeight
+  image-gap: 8                        # Theme.imageGap — the image is drawn half of it below its line
+  image-max-height: 480               # Theme.imageMaxHeight
+  sidebar-icon-size: 16               # Theme.sidebarIconSize
+  sidebar-icon-gap: 6                 # Theme.sidebarIconGap
+  sidebar-cell-inset: 2               # Theme.sidebarCellInset
+  sidebar-min-width: 180              # Theme.sidebarMinWidth
+  sidebar-max-width: 420              # Theme.sidebarMaxWidth
+  editor-min-width: 320               # Theme.editorMinWidth
+  default-window-size: { width: 1100, height: 750 }   # Theme.defaultWindowSize
 
 rounded:
-  sm: 5        # code-block background (EditorLayoutManager)
-  md: 8        # drop-target highlight (DropView)
+  sm: 5        # Theme.codeBlockRadius — code-block background
+  md: 8        # Theme.dropHighlightRadius — drop-target highlight
   # No lg / full: no cards, sheets, pills or avatars exist. Add when one does.
 
 # Not part of the Google schema but read by agents all the same.
@@ -81,19 +84,19 @@ elevation:
   2: { material: "system" }                                            # menus, find bar — AppKit's own
   3: { material: "system" }                                            # NSAlert sheets and NSOpenPanel/NSSavePanel — AppKit's own
 strokes:
-  quote-bar: { width: 3, inset: 2, color: "{divider}" }
-  horizontal-rule: { width: 1, color: "{divider}" }
-  table-header-rule: { width: 1, color: "{divider} alpha ×2" }
-  table-row-rule: { width: 1, color: "{divider} alpha ×0.8" }
-  drop-highlight: { width: 3, inset: 3, color: "{primary}", rounded: "{rounded.md}" }
+  quote-bar: { width: 3, inset: 2, color: "{divider}" }                        # Theme.quoteBarWidth, quoteBarInset
+  horizontal-rule: { width: 1, color: "{divider}" }                            # Theme.ruleWidth
+  table-header-rule: { width: 1, color: "{divider} alpha ×2" }                 # Theme.tableHeaderRuleColor (tableHeaderRuleAlphaScale)
+  table-row-rule: { width: 1, color: "{divider} alpha ×0.8" }                  # Theme.tableRowRuleColor (tableRowRuleAlphaScale)
+  drop-highlight: { width: 3, inset: 3, color: "{primary}", rounded: "{rounded.md}" }   # Theme.dropHighlightStroke, dropHighlightInset
 motion:
   # No app-authored animation. Sidebar collapse, find bar, sheets and selection use AppKit's
   # defaults, which already honour Reduce Motion. Add durations here only when custom motion appears.
   custom: none
 
 components:
-  editor:        { backgroundColor: "{background}", textColor: "{text}", font: "{typography.document-body}", maxWidth: "{spacing.content-max-width}" }
-  sidebar-row:   { textColor: "{text-ui}", font: "{typography.ui-body}", selectedBackground: "{selection}", selectedText: "{on-selection}", icon: "SF Symbol folder / doc.text @ 16" }
+  editor:        { backgroundColor: "{background}", textColor: "{text}", font: "{typography.document-body}", maxWidth: "{spacing.readable-width}" }
+  sidebar-row:   { textColor: "{text-ui}", font: "{typography.ui-body}", selectedBackground: "{selection}", selectedText: "{on-selection}", icon: "SF Symbol folder / doc.text @ {spacing.sidebar-icon-size}" }
   code-block:    { backgroundColor: "{code-background}", font: "{typography.document-code}", rounded: "{rounded.sm}", indent: "{spacing.code-block-indent}" }
   inline-code:   { backgroundColor: "{code-background}", font: "{typography.document-code}" }
   block-quote:   { textColor: "{text-secondary}", bar: "{strokes.quote-bar}", indent: "{spacing.quote-indent}" }
@@ -102,7 +105,7 @@ components:
   list-marker:   { textColor: "{text-secondary}" }
   table:         { headerWeight: 700, headerRule: "{strokes.table-header-rule}", rowRule: "{strokes.table-row-rule}", gutter: "{spacing.table-gutter}" }
   drop-target:   { stroke: "{strokes.drop-highlight}" }
-  empty-state:   { textColor: "{text-tertiary}", font: "{typography.ui-empty-state}" }
+  empty-state:   { textColor: "{text-secondary}", font: "{typography.ui-empty-state}" }
 ---
 
 ## Overview
@@ -123,8 +126,7 @@ app does make choices they are in the document: a 15pt reading size, a 760pt col
 headings on a tight scale, and quiet markdown syntax that appears only where the caret is.
 
 **Source of truth in code:** `Sources/MarkdownCore/Theme.swift`. The front matter above mirrors it
-exactly; change both in the same commit. Layout constants that still live outside `Theme.swift`
-are listed under Follow-ups below with the line they sit on.
+exactly; change both in the same commit.
 
 **What we kept from the existing code:**
 
@@ -140,9 +142,9 @@ are listed under Follow-ups below with the line they sit on.
 - Block chrome drawn by `EditorLayoutManager`: code-block fill at radius 5, a 3pt quote bar, a
   1pt horizontal rule, table rules derived from `separatorColor`.
 - The drop-target highlight: a 3pt `controlAccentColor` rounded stroke inset 3pt.
-- The public download site (`site/style.css`) has its own web palette (`#0a66d8` accent, `#1d1d1f`
-  text). It is a marketing page, not the app, and is out of scope here; it should not leak into
-  the app and the app's greys should not be forced onto it.
+- The public download site (`site/`) follows this system too: its CSS colours are the hex values
+  the app's semantic colours resolve to, on the same type scale and reading column. See Layout ›
+  Website for the mapping and its one deviation.
 
 **Decisions made in this pass (no one to ask, so stated here):**
 
@@ -156,31 +158,8 @@ are listed under Follow-ups below with the line they sit on.
   on screen today and changing it is not this task.
 - Motion stays "none custom"; the token block says so instead of inventing durations.
 
-**Follow-ups** — raw literals outside `Theme.swift` that belong in it (file:line, value, suggested
-token). Not refactored in this pass:
-
-- `Sources/MarkdownEditor/EditorViewController.swift:6` — `readableWidth = 760` → `Theme.readableWidth`
-- `Sources/MarkdownEditor/EditorViewController.swift:7` — `minimumInset = 28` → `Theme.editorInsetHorizontalMin`
-- `Sources/MarkdownEditor/EditorViewController.swift:53,103` — vertical inset `24` (twice) → `Theme.editorInsetVertical`
-- `Sources/MarkdownEditor/EditorViewController.swift:69` — `emptyLabel.textColor = .tertiaryLabelColor` → `Theme.emptyStateColor`; and raise it to `secondaryLabelColor` (see Colors: 1.88:1 light / 2.27:1 dark fails even the large-text floor)
-- `Sources/MarkdownEditor/EditorViewController.swift:70` — `.systemFont(ofSize: 17)` → `NSFont.preferredFont(forTextStyle: .title2)` via `Theme.emptyStateFont`
-- `Sources/MarkdownEditor/EditorLayoutManager.swift:20` — `NSColor.quaternarySystemFill` → `theme.codeBackground` (same value, second copy)
-- `Sources/MarkdownEditor/EditorLayoutManager.swift:21` — radius `5`, vertical outset `2` → `Theme.codeBlockRadius`, `Theme.codeBlockPadding`
-- `Sources/MarkdownEditor/EditorLayoutManager.swift:26-27` — `NSColor.separatorColor`, bar width `3`, inset `2` → `Theme.dividerColor`, `Theme.quoteBarWidth`, `Theme.quoteBarInset`
-- `Sources/MarkdownEditor/EditorLayoutManager.swift:32` — `NSColor.separatorColor` (horizontal rule) → `Theme.dividerColor`
-- `Sources/MarkdownEditor/EditorLayoutManager.swift:51` — image offset `4` below the line → `Theme.imageGap / 2` or its own name
-- `Sources/MarkdownEditor/EditorLayoutManager.swift:93-97` — `tableRuleColors()` derives from `separatorColor` with alpha ×2 / ×0.8 → `Theme.tableHeaderRuleColor`, `Theme.tableRowRuleColor`
-- `Sources/MarkdownEditor/EditorLayoutManager.swift:104` — fallback `.systemFont(ofSize: 15)` → `theme.bodyFont`
-- `Sources/MarkdownCore/MarkdownStyler.swift:131` — `tableGutter = 12` → `Theme.tableGutter`
-- `Sources/MarkdownCore/MarkdownStyler.swift:191` — heading `spacingBefore` `10` (H1–H2) / `6` (H3–H6) → `Theme.headingSpacingBefore`
-- `Sources/MarkdownCore/MarkdownStyler.swift:192` — heading `lineHeightMultiple: 1.15` → `Theme.headingLineHeightMultiple`
-- `Sources/MarkdownCore/MarkdownStyler.swift:198` — code-block indent `12`, `lineHeightMultiple: 1.2` → `Theme.codeBlockIndent`, `Theme.codeLineHeightMultiple`
-- `Sources/MarkdownEditor/DropView.swift:53-55` — `NSColor.controlAccentColor`, inset `3`, radius `8`, line width `3` → `Theme.accentColor`, `Theme.dropHighlight{Inset,Radius,Stroke}`
-- `Sources/MarkdownEditor/SidebarViewController.swift:176-181` — icon width `16`, icon↔label gap `6`, cell inset `2` → `Theme.sidebarIconSize`, `Theme.sidebarIconGap`, `Theme.sidebarCellInset`
-- `Sources/MarkdownEditor/MainWindowController.swift:18,37,47` — window `1100×750` (three copies) → `Theme.defaultWindowSize`
-- `Sources/MarkdownEditor/MainWindowController.swift:28-32` — sidebar `180`/`420`, editor min `320` → `Theme.sidebarMinWidth`, `Theme.sidebarMaxWidth`, `Theme.editorMinWidth`
-- `Sources/MarkdownEditor/ImageCache.swift:7-8` — `maxHeight = 480`, `gap = 8` → `Theme.imageMaxHeight`, `Theme.imageGap`
-- `Sources/MarkdownEditor/MarkerHidingLayoutDelegate.swift:72` — `hiddenDelimiterHeight = 9` → `Theme.tableDelimiterStripHeight`
+All layout and colour values now live in `Theme.swift`; views read them from the one `Theme`
+that `MainWindowController` creates and hands down.
 
 ## Colors
 
@@ -195,11 +174,11 @@ Roles, and what each is reserved for:
 - **text** (`textColor`) — document text, headings, code. Never dimmed for emphasis; weight and
   size do that.
 - **text-secondary** (`secondaryLabelColor`) — things that are part of the content but not the
-  point of it: block-quote text, list bullets and numbers, image alt text.
+  point of it: block-quote text, list bullets and numbers, image alt text. Also the empty-state
+  label.
 - **text-tertiary** (`tertiaryLabelColor`) — markdown syntax when it is revealed (`#`, `**`,
   `` ` ``, link URLs, table pipes). It is meant to be nearly invisible: the caret reveals it, and
-  the reader is not expected to read it. Also, today, the empty-state label — which it is too faint
-  for; see Follow-ups.
+  the reader is not expected to read it.
 - **link** (`linkColor`) — link text only. ⌘-click opens it; the colour is the only affordance,
   which is acceptable because the document is otherwise monochrome and the cursor changes.
 - **code-background** (`quaternarySystemFill`) — inline code and fenced blocks. A 2.7 %-alpha fill:
@@ -222,7 +201,8 @@ Contrast, checked with `contrast.py` against the values the semantic colours res
 | text / code-background (`#F8F8F8`, `#242424`) | 19.77:1 | 15.52:1 | ≥ 4.5 | pass |
 | link / background (`#0068DA`, `#419CFF`) | 5.26:1 | 5.89:1 | ≥ 4.5 | pass |
 | text-secondary / background (`#808080`, `#9A9A9A`) | **3.95:1** | 5.92:1 | ≥ 4.5 | light fails AA for 15pt regular (quote text, list markers) |
-| text-tertiary / background (`#BDBDBD`, `#565656`) | **1.88:1** | **2.27:1** | ≥ 4.5 (≥ 3 if decorative) | fails — acceptable for revealed syntax, not for the empty-state label |
+| text-tertiary / background (`#BDBDBD`, `#565656`) | **1.88:1** | **2.27:1** | ≥ 4.5 (≥ 3 if decorative) | fails — acceptable for revealed syntax only |
+| empty-state (text-secondary) / background (`#808080`, `#9A9A9A`) | **3.95:1** | 5.92:1 | ≥ 4.5 | light under AA: 17pt regular is not large text (WCAG needs 18.66px bold or 24px); it is the strongest grey the system palette offers, and Increase Contrast raises it |
 | on-selection / selection (`#FFFFFF` on `#0064E1`, `#0059D1`) | 5.37:1 | 6.27:1 | ≥ 4.5 | pass |
 | text / text-selection (`#B3D7FF`, `#3F638B`) | 14.08:1 | 6.23:1 | ≥ 4.5 | pass |
 | primary / background (`#007AFF`, non-text stroke) | 4.02:1 | 4.15:1 | ≥ 3 | pass |
@@ -235,9 +215,11 @@ Two results need a decision, both platform-level: Apple's `secondaryLabelColor` 
 3.95:1, under the 4.5 AA floor for 15pt regular text, and `tertiaryLabelColor` is under 3:1 in
 both appearances. Increase Contrast fixes both at the system level (the semantic colours darken),
 which is the HIG's answer. Within the app: keep revealed syntax on tertiary (it is a hint, not
-content, and the raw characters are also selectable and copyable), move the empty-state label to
-`secondaryLabelColor`, and treat quote text / list markers on light as accepted-with-eyes-open
-until a reader complains — do not replace the system colour with a darker literal.
+content, and the raw characters are also selectable and copyable), keep the empty-state label on
+`secondaryLabelColor` (3.95:1 light / 5.92:1 dark; the best the system palette offers short of
+`labelColor`, which would make a hint read as content), and treat quote text / list markers on
+light as accepted-with-eyes-open until a reader complains — do not replace the system colour with
+a darker literal.
 
 ## Typography
 
@@ -261,8 +243,8 @@ cost of a one-column editor that also has to show wide tables; a table wider tha
 falls back to source rather than scrolling.
 
 UI chrome stays at system text styles: sidebar rows at the label default (Body, 13pt), the window
-title and subtitle at the system's. The empty-state label is 17pt regular, which is Title 2;
-it should be expressed as that text style (Follow-ups). Minimum size anywhere is 13pt UI, 13.5pt
+title and subtitle at the system's. The empty-state label is the Title 2 text style
+(17pt regular), `Theme.emptyStateFont`. Minimum size anywhere is 13pt UI, 13.5pt
 document.
 
 ## Layout
@@ -272,7 +254,7 @@ Two panes in an `NSSplitViewController`: the sidebar (180–420pt, collapsible, 
 split position. There is no toolbar and no status bar; the title bar carries the folder name with
 its proxy icon and the file name as subtitle.
 
-The editor is a single column of text, `content-max-width` 760pt, centred when the pane is wider
+The editor is a single column of text, `readable-width` 760pt, centred when the pane is wider
 than that, with a minimum 28pt inset on each side and 24pt at the top. The column width drives
 everything that has to fit: images scale to it (max height 480, 8pt gap below), and a table whose
 rows cannot fit it shows as source instead of overflowing.
@@ -289,6 +271,42 @@ inset, middle-truncated names. Folders expand in place; expansion state is remem
 
 Base unit 4pt; the named values above are the ones that exist. Do not add a spacing token for a
 value used once.
+
+### Website
+
+The download site (`site/style.css`, `site/index.template.html`) is the app's document view on the web: one
+calm, monochrome column with one accent. Its CSS custom properties are the hex values the app's semantic
+`NSColor`s resolve to on macOS 26 (the Colors table above): background `textBackgroundColor`
+(`#FFFFFF` / `#1E1E1E`), text `textColor` (`#000000` / `#FFFFFF`), link `linkColor` (`#0068DA` / `#419CFF`),
+code fill `quaternarySystemFill` (`#F8F8F8` / `#242424`), divider `separatorColor` (`#E6E6E6` / `#343434`),
+button hairline and warning bar = the table-header rule (`#CDCDCD` / `#4A4A4A`), and focus = `controlAccentColor`
+`#007AFF`, drawn as a 3px outline. No sidebar or surface grey is used: nothing on the page plays the sidebar's role,
+and a grey card would turn the page into a SaaS card kit. The one deliberate deviation is muted text on light:
+the web has no Increase Contrast, so `secondaryLabelColor`'s `#808080` (3.95:1) becomes `#6E6E6E` (5.10:1 on white,
+4.80:1 on the code fill). Dark keeps the app's `#9A9A9A`. The site has no status colours, so the old yellow
+warning box is now the app's block quote (3px bar, 16px indent) with text at full strength.
+
+Type is the system stack (`system-ui`, `ui-monospace`) on the document scale: body 15px, hero headline 28px,
+section headings 24px, sub-headings 17px, product name 20px, all semibold (600), and code 13.5px. Line height
+is 1.6 for body and 1.3 for headings, because AppKit's ×1.35 and ×1.15 multiply SF's own ~1.19 line height.
+The layout is the 760px reading column with 28px side insets
+(16px under 640px). Sections are separated by the 1px horizontal rule, not boxes. Radii come from the app:
+5px on code fills, buttons and focus rings. The app icon gets a 22.5% corner radius because the full-bleed PNG
+is not masked on the web the way macOS masks it.
+
+The hero leads with the app icon (`app-icon-512.png`) and the name. Below it is the real window at real size
+(2200×1500 capture shown at 1100 CSS px; `screenshot-dark.png` via `prefers-color-scheme`). It has the page's only
+shadow, the one macOS gives every window, because it is the only window on the page. Buttons are AppKit-style push
+buttons: hairline, text colour, no fill. No authored motion; `prefers-reduced-motion` is honoured.
+
+| Pair | Light | Dark | Target |
+|---|---|---|---|
+| text / background | 21.00 | 16.67 | 4.5 pass |
+| text / code fill (code, button hover) | 19.77 | 15.52 | 4.5 pass |
+| muted / background | 5.10 | 5.92 | 4.5 pass |
+| muted / code fill (inline code in meta) | 4.80 | 5.52 | 4.5 pass |
+| link / background | 5.26 | 5.89 | 4.5 pass |
+| focus ring `#007AFF` / background, code fill | 4.02, 3.78 | 4.15, 3.86 | 3.0 pass (non-text) |
 
 ## Elevation & Depth
 
@@ -392,9 +410,11 @@ back. Too wide for the column: stays as source with pipes in `text-tertiary` —
 `text-secondary` and reserves nothing. Images never load over the network.
 
 **Sidebar (`SidebarViewController`)** — source-list outline of the open folder. Default row:
-icon + name in `text-ui`. Hover: none (source lists do not hover). Selected: system
-`selection` fill with `on-selection` text, a persistent state that also moves the editor to that
-file. Focus: the outline's system focus ring and keyboard navigation (arrows, type-to-select).
+icon + name in `text-ui`. Hover: none (source lists do not hover). Selected, window
+key: system `selection` fill with `on-selection` text. Selected, window not key: macOS 26 draws an
+unemphasized pale grey fill with the name in the accent colour. Both are the system's
+(`NSTableView` emphasis), never drawn by the app. Selection is persistent and also moves the
+editor to that file. Focus: the outline's system focus ring and keyboard navigation (arrows, type-to-select).
 Expanded/collapsed: the disclosure triangle. External change: rows reload in place and the
 selection is kept. Empty folder: the outline is simply empty; the editor's empty state carries
 the message.
@@ -423,7 +443,7 @@ holds the markdown actions with their ⌘ shortcuts. No custom menu styling.
 ## Do's and Don'ts
 
 - Do read `Theme` (and the semantic `NSColor`s) only; never a hex, an `NSColor(white:)`, or a
-  bare point size in a view. The Follow-ups list is the debt; do not add to it.
+  bare point size in a view. A new value goes into `Theme.swift` and this front matter first.
 - Do keep document type on `Theme` sizes and chrome on system text styles; the 15pt body is a
   reading-surface exception, not a licence to size UI by hand.
 - Do keep the platform's focus ring, selection colours, sidebar material and accent. If a custom

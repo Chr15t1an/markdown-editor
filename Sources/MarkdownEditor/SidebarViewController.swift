@@ -7,6 +7,8 @@ final class SidebarViewController: NSViewController, NSOutlineViewDataSource, NS
     let outlineView = NSOutlineView()
     private(set) var root: FileNode?
     var onSelectFile: ((URL) -> Void)?
+    /// Set by the window controller; read when cells are made.
+    var theme = Theme()
     private var watcher: FolderWatcher?
     private var isRevealing = false
 
@@ -173,11 +175,11 @@ final class SidebarViewController: NSViewController, NSOutlineViewDataSource, NS
         cell.imageView = image
         cell.textField = text
         NSLayoutConstraint.activate([
-            image.leadingAnchor.constraint(equalTo: cell.leadingAnchor, constant: 2),
+            image.leadingAnchor.constraint(equalTo: cell.leadingAnchor, constant: theme.sidebarCellInset),
             image.centerYAnchor.constraint(equalTo: cell.centerYAnchor),
-            image.widthAnchor.constraint(equalToConstant: 16),
-            text.leadingAnchor.constraint(equalTo: image.trailingAnchor, constant: 6),
-            text.trailingAnchor.constraint(equalTo: cell.trailingAnchor, constant: -2),
+            image.widthAnchor.constraint(equalToConstant: theme.sidebarIconSize),
+            text.leadingAnchor.constraint(equalTo: image.trailingAnchor, constant: theme.sidebarIconGap),
+            text.trailingAnchor.constraint(equalTo: cell.trailingAnchor, constant: -theme.sidebarCellInset),
             text.centerYAnchor.constraint(equalTo: cell.centerYAnchor),
         ])
         return cell

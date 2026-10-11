@@ -1,12 +1,10 @@
 import AppKit
+import MarkdownCore
 
 /// Loads local images for image-only paragraphs, off the main queue, and sizes them for the
 /// text column. Remote (http/https) images are never fetched — no network without a reason.
 @MainActor
 final class ImageCache {
-    static let maxHeight: CGFloat = 480
-    static let gap: CGFloat = 8
-
     private var images: [URL: NSImage] = [:]
     private var missing: Set<URL> = []
     private var loading: Set<URL> = []
@@ -28,8 +26,9 @@ final class ImageCache {
         return URL(fileURLWithPath: path, relativeTo: folder).standardizedFileURL
     }
 
-    /// Fits `size` to `width` (never upscaling) and caps the height.
-    static func scaledSize(_ size: NSSize, toWidth width: CGFloat) -> NSSize {
+    /// Fits `size` to `width` (never upscaling) and caps the height at `maxHeight`.
+    static func scaledSize(_ size: NSSize, toWidth width: CGFloat,
+                           maxHeight: CGFloat = Theme().imageMaxHeight) -> NSSize {
         guard size.width > 0, size.height > 0, width > 0 else { return .zero }
         var scale = min(1, width / size.width)
         if size.height * scale > maxHeight { scale = maxHeight / size.height }

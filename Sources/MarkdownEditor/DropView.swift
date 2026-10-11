@@ -4,6 +4,10 @@ import MarkdownCore
 /// Window content view that accepts a dropped folder or markdown file anywhere in the window.
 final class DropView: NSView {
     var onOpen: ((URL) -> Void)?
+    var theme: Theme {
+        get { highlight.theme }
+        set { highlight.theme = newValue; highlight.needsDisplay = true }
+    }
     private let highlight = DropHighlightView()
 
     override init(frame: NSRect) {
@@ -48,11 +52,13 @@ final class DropView: NSView {
 }
 
 private final class DropHighlightView: NSView {
+    var theme = Theme()
     override func hitTest(_ point: NSPoint) -> NSView? { nil }
     override func draw(_ dirtyRect: NSRect) {
-        NSColor.controlAccentColor.setStroke()
-        let path = NSBezierPath(roundedRect: bounds.insetBy(dx: 3, dy: 3), xRadius: 8, yRadius: 8)
-        path.lineWidth = 3
+        theme.accentColor.setStroke()
+        let inset = theme.dropHighlightInset, radius = theme.dropHighlightRadius
+        let path = NSBezierPath(roundedRect: bounds.insetBy(dx: inset, dy: inset), xRadius: radius, yRadius: radius)
+        path.lineWidth = theme.dropHighlightStroke
         path.stroke()
     }
 }

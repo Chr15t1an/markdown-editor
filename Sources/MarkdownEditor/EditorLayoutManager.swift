@@ -7,6 +7,8 @@ final class EditorLayoutManager: NSLayoutManager {
     weak var hiding: MarkerHidingLayoutDelegate?
     /// Draws an image into the space reserved below an image-only paragraph.
     var drawImage: ((ImageInfo, NSRect) -> Void)?
+    /// Set by the editor from its styler's theme.
+    var theme = Theme()
 
     override func drawBackground(forGlyphRange glyphsToShow: NSRange, at origin: NSPoint) {
         super.drawBackground(forGlyphRange: glyphsToShow, at: origin)
@@ -17,20 +19,22 @@ final class EditorLayoutManager: NSLayoutManager {
         storage.enumerateAttribute(.mdCodeBlock, in: chars) { value, range, _ in
             guard value != nil else { return }
             let rect = blockRect(range, origin: origin, width: width, container: container)
-            NSColor.quaternarySystemFill.setFill()
-            NSBezierPath(roundedRect: rect.insetBy(dx: 0, dy: -2), xRadius: 5, yRadius: 5).fill()
+            theme.codeBackground.setFill()
+            NSBezierPath(roundedRect: rect.insetBy(dx: 0, dy: -theme.codeBlockPadding),
+                         xRadius: theme.codeBlockRadius, yRadius: theme.codeBlockRadius).fill()
         }
         storage.enumerateAttribute(.mdQuote, in: chars) { value, range, _ in
             guard value != nil else { return }
             let rect = blockRect(range, origin: origin, width: width, container: container)
-            NSColor.separatorColor.setFill()
-            NSRect(x: rect.minX + 2, y: rect.minY + 2, width: 3, height: rect.height - 4).fill()
+            theme.dividerColor.setFill()
+            let inset = theme.quoteBarInset
+            NSRect(x: rect.minX + inset, y: rect.minY + inset, width: theme.quoteBarWidth, height: rect.height - 2 * inset).fill()
         }
         storage.enumerateAttribute(.mdHorizontalRule, in: chars) { value, range, _ in
             guard value != nil, markersHidden(at: range.location, in: storage) else { return }
             let rect = blockRect(range, origin: origin, width: width, container: container)
-            NSColor.separatorColor.setFill()
-            NSRect(x: rect.minX, y: floor(rect.midY), width: rect.width, height: 1).fill()
+            theme.dividerColor.setFill()
+            NSRect(x: rect.minX, y: floor(rect.midY), width: rect.width, height: theme.ruleWidth).fill()
         }
         var tablesDrawn = Set<Int>()
         storage.enumerateAttribute(.mdTable, in: chars) { value, range, _ in
@@ -49,7 +53,8 @@ final class EditorLayoutManager: NSLayoutManager {
             let line = lineFragmentUsedRect(forGlyphAt: glyphs.location, effectiveRange: nil)
             let frag = lineFragmentRect(forGlyphAt: glyphs.location, effectiveRange: nil)
             let x = origin.x + container.lineFragmentPadding
-            let below = NSRect(x: x, y: origin.y + line.maxY + 4, width: width, height: frag.maxY - line.maxY - 4)
+            let offset = theme.imageGap / 2   // the image sits half the reserved gap below its line
+            let below = NSRect(x: x, y: origin.y + line.maxY + offset, width: width, height: frag.maxY - line.maxY - offset)
             drawImage?(info, below)
         }
     }
@@ -73,27 +78,17 @@ final class EditorLayoutManager: NSLayoutManager {
         let delimiter = fragment(lines[1])
         let x = origin.x + delimiter.minX + container.lineFragmentPadding
         let width = min(info.width, container.size.width - 2 * container.lineFragmentPadding)
-        // The header rule reads stronger than the row separators. separatorColor is mostly
-        // transparent (its alpha is ~0.1), so scale its alpha rather than replace it.
-        let (headerRule, rowRule) = Self.tableRuleColors()
-        headerRule.setFill()
-        NSRect(x: x, y: origin.y + floor(delimiter.midY), width: width, height: 1).fill()
+        // The header rule reads stronger than the row separators (Theme scales the divider's alpha).
+        theme.tableHeaderRuleColor.setFill()
+        NSRect(x: x, y: origin.y + floor(delimiter.midY), width: width, height: theme.ruleWidth).fill()
         // Between body rows: halfway between the baseline of the row above and the cap-height
         // top of the row below (the line-height multiple puts its extra space above the text).
-        rowRule.setFill()
+        theme.tableRowRuleColor.setFill()
         let body = Array(lines.dropFirst(2))
         for (above, below) in zip(body, body.dropFirst()) {
             let bottom = textMetrics(above, storage).baseline, top = textMetrics(below, storage).capTop
-            NSRect(x: x, y: origin.y + floor((bottom + top) / 2), width: width, height: 1).fill()
+            NSRect(x: x, y: origin.y + floor((bottom + top) / 2), width: width, height: theme.ruleWidth).fill()
         }
-    }
-
-    /// Header rule and row separator colours: separatorColor's alpha scaled up and down, resolved
-    /// for the current (drawing) appearance.
-    static func tableRuleColors() -> (header: NSColor, row: NSColor) {
-        let base = NSColor.separatorColor.usingColorSpace(.sRGB) ?? NSColor(white: 0.5, alpha: 0.1)
-        let alpha = base.alphaComponent
-        return (base.withAlphaComponent(min(1, alpha * 2)), base.withAlphaComponent(alpha * 0.8))
     }
 
     /// Container-space baseline and cap-height top of a line's text (its first font).
@@ -101,7 +96,7 @@ final class EditorLayoutManager: NSLayoutManager {
         let g = glyphIndexForCharacter(at: line.location)
         let frag = lineFragmentRect(forGlyphAt: g, effectiveRange: nil)
         let baseline = frag.minY + location(forGlyphAt: g).y
-        let font = storage.attribute(.font, at: line.location, effectiveRange: nil) as? NSFont ?? .systemFont(ofSize: 15)
+        let font = storage.attribute(.font, at: line.location, effectiveRange: nil) as? NSFont ?? theme.bodyFont
         return (baseline, baseline - font.capHeight)
     }
 

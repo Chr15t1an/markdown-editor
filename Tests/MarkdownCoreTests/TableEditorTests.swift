@@ -95,7 +95,7 @@ final class TableEditorTests: XCTestCase {
         }
         let delimiter = loc(text, "|---")
         e.textView.setSelectedRange(NSRange(location: 0, length: 0))
-        XCTAssertEqual(height(delimiter), MarkerHidingLayoutDelegate.hiddenDelimiterHeight)
+        XCTAssertEqual(height(delimiter), Theme().tableDelimiterStripHeight)
         XCTAssertGreaterThan(height(loc(text, "Opus")), 15)
         e.textView.setSelectedRange(NSRange(location: loc(text, "Opus"), length: 0))
         XCTAssertEqual(height(delimiter), height(loc(text, "Opus")), accuracy: 0.5)
@@ -111,14 +111,14 @@ final class TableEditorTests: XCTestCase {
             lm.lineFragmentRect(forGlyphAt: lm.glyphIndexForCharacter(at: char), effectiveRange: nil).height
         }
         XCTAssertTrue(hidden(e, loc(text, "||")))                       // its pipes are hidden
-        XCTAssertEqual(height(loc(text, "|---")), MarkerHidingLayoutDelegate.hiddenDelimiterHeight)
+        XCTAssertEqual(height(loc(text, "|---")), Theme().tableDelimiterStripHeight)
         XCTAssertEqual(height(loc(text, "||")), height(loc(text, "| c")), accuracy: 0.5)
     }
 
     func testHeaderRuleIsStrongerThanRowSeparators() {
         for name in [NSAppearance.Name.aqua, .darkAqua] {
             NSAppearance(named: name)!.performAsCurrentDrawingAppearance {
-                let (header, row) = EditorLayoutManager.tableRuleColors()
+                let header = Theme().tableHeaderRuleColor, row = Theme().tableRowRuleColor
                 let base = NSColor.separatorColor.usingColorSpace(.sRGB)!.alphaComponent
                 XCTAssertGreaterThan(header.alphaComponent, row.alphaComponent)
                 XCTAssertLessThan(row.alphaComponent, base + 0.001)        // scaled, not replaced
@@ -308,6 +308,6 @@ final class TableEditorTests: XCTestCase {
         e.textView.setSelectedRange(NSRange(location: 0, length: 0))
         XCTAssertFalse(hidden(e, loc(text, "| Opus") + 1))
         let lineStart = x(e, loc(text, "| Opus"))
-        XCTAssertEqual(x(e, loc(text, "Opus")) - lineStart, MarkdownStyler.tableGutter, accuracy: 0.5)
+        XCTAssertEqual(x(e, loc(text, "Opus")) - lineStart, Theme().tableGutter, accuracy: 0.5)
     }
 }

@@ -1,29 +1,39 @@
+/* Tokens are the web values of the app's semantic NSColors (DESIGN.md › Colors, resolved on
+   macOS 26), so the page reads like the app's document view. One deliberate deviation: --muted on
+   light. The app's secondaryLabelColor (#808080, 3.95:1 on white) relies on Increase Contrast,
+   which the web does not have, so the site darkens it to #6E6E6E (5.10:1). Dark keeps the app's
+   #9A9A9A (5.92:1). */
 :root {
   color-scheme: light dark;
-  --bg: #fbfbfa;
-  --surface: #ffffff;
-  --text: #1d1d1f;
-  --muted: #5f5f66;
-  --border: #e3e3e6;
-  --accent: #0a66d8;
-  --accent-text: #ffffff;
-  --warn-bg: #fff6e0;
-  --warn-border: #e8c46a;
-  --code-bg: #f1f1f3;
+  --bg: #ffffff;              /* textBackgroundColor */
+  --text: #000000;            /* textColor */
+  --muted: #6e6e6e;           /* secondaryLabelColor, darkened for web AA (see above) */
+  --link: #0068da;            /* linkColor */
+  --code-bg: #f8f8f8;         /* quaternarySystemFill over the background */
+  --divider: #e6e6e6;         /* separatorColor over the background */
+  --divider-strong: #cdcdcd;  /* separatorColor ×2 alpha: the app's table-header rule */
+  --focus: #007aff;           /* controlAccentColor, default blue */
+  --window-edge: rgba(0, 0, 0, 0.4);
+  --window-shadow: rgba(0, 0, 0, 0.14);
+
+  --font: system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+  --mono: ui-monospace, "SF Mono", SFMono-Regular, Menlo, monospace;
+  --radius-sm: 5px;           /* code-block fill */
+  --radius-md: 8px;           /* drop-target outline */
+  --column: 760px;            /* the editor's readable width */
 }
 
 @media (prefers-color-scheme: dark) {
   :root {
-    --bg: #161618;
-    --surface: #1f1f22;
-    --text: #ececef;
-    --muted: #a3a3ab;
-    --border: #34343a;
-    --accent: #4c9bff;
-    --accent-text: #0b1220;
-    --warn-bg: #2b2414;
-    --warn-border: #7a6224;
-    --code-bg: #2a2a2e;
+    --bg: #1e1e1e;
+    --text: #ffffff;
+    --muted: #9a9a9a;
+    --link: #419cff;
+    --code-bg: #242424;
+    --divider: #343434;
+    --divider-strong: #4a4a4a;
+    --window-edge: rgba(255, 255, 255, 0.28);
+    --window-shadow: rgba(0, 0, 0, 0.55);
   }
 }
 
@@ -31,161 +41,160 @@
 
 html { -webkit-text-size-adjust: 100%; }
 
+/* Body is the app's document body: 15px regular. NSParagraphStyle's ×1.35 multiplies SF's own
+   ~1.19 line height, which is ~1.6 in CSS; headings' ×1.15 is ~1.35. */
 body {
   margin: 0;
   background: var(--bg);
   color: var(--text);
-  font: 17px/1.55 system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+  font: 15px/1.6 var(--font);
 }
 
-main, footer {
-  max-width: 760px;
-  margin: 0 auto;
-  padding: 0 16px;
+main { padding-inline: 28px; }   /* the editor's minimum side inset */
+main > * { max-width: var(--column); margin-inline: auto; }
+
+h1, h2, h3 { font-weight: 600; line-height: 1.3; letter-spacing: normal; }
+
+a { color: var(--link); text-underline-offset: 0.15em; }
+a:focus-visible, button:focus-visible {
+  outline: 3px solid var(--focus);
+  outline-offset: 2px;
+  border-radius: var(--radius-sm);
 }
 
-a { color: var(--accent); }
-
-code, pre {
-  font-family: ui-monospace, "SF Mono", Menlo, monospace;
-  font-size: 0.88em;
-}
-
-code { background: var(--code-bg); padding: 0.1em 0.35em; border-radius: 4px; }
-
+code, pre { font-family: var(--mono); }
+code { font-size: 0.9em; background: var(--code-bg); padding: 0.1em 0.25em; }
 pre {
+  margin: 0;
   background: var(--code-bg);
-  padding: 12px 14px;
-  border-radius: 8px;
+  border-radius: var(--radius-sm);
+  padding: 10px 12px;
+  font-size: 13.5px;
+  line-height: 1.45;
   overflow-x: auto;
 }
-pre code { background: none; padding: 0; }
+pre code { font-size: inherit; background: none; padding: 0; }
+
+b, strong { font-weight: 600; }
+.meta { color: var(--muted); font-size: 13px; }
 
 /* ---------- hero */
-.hero { padding: 64px 0 32px; }
-.app-name { margin: 0 0 8px; color: var(--muted); font-weight: 600; letter-spacing: 0.02em;
-  display: flex; align-items: center; gap: 8px; }
-.app-icon { width: 28px; height: 28px; border-radius: 7px; }
-h1 { margin: 0 0 16px; font-size: clamp(2rem, 6vw, 2.9rem); line-height: 1.12; letter-spacing: -0.02em; }
-.lede { margin: 0 0 28px; font-size: 1.12rem; color: var(--muted); max-width: 40em; }
+.hero { padding: 56px 0 32px; }
+.identity { display: flex; align-items: center; gap: 16px; margin: 0 0 28px; }
+.app-icon {
+  width: 80px;
+  height: 80px;
+  border-radius: 22.5%;       /* macOS applies this mask to the full-bleed icon; the web has to */
+  box-shadow: 0 0 0 1px var(--divider);
+}
+.app-name { margin: 0; font-size: 20px; font-weight: 600; line-height: 1.3; }
+h1 { margin: 0 0 12px; font-size: 28px; }
+.lede { margin: 0 0 32px; font-size: 17px; line-height: 1.5; max-width: 38em; }
 
-.download { display: flex; flex-wrap: wrap; align-items: center; gap: 12px 18px; margin: 0; }
-.button {
-  display: inline-block;
-  background: var(--accent);
-  color: var(--accent-text);
-  font-weight: 600;
-  text-decoration: none;
-  padding: 12px 22px;
-  border-radius: 10px;
-  transition: filter 0.15s ease;
-}
-.button:hover { filter: brightness(1.08); }
-.button:focus-visible { outline: 3px solid var(--accent); outline-offset: 3px; }
-.button-secondary {
-  background: transparent;
-  color: var(--accent);
-  border: 1px solid var(--accent);
-  padding: 11px 21px;
-}
-.meta { color: var(--muted); font-size: 0.92rem; }
-
-/* ---------- terminal install */
-.install {
-  background: var(--surface);
-  border: 1px solid var(--border);
-  border-radius: 12px;
-  padding: 20px 24px;
-  margin: 0 0 24px;
-}
-.install h2 { margin: 0 0 6px; font-size: 1.2rem; }
-.install p { margin: 0 0 12px; }
-.install .meta { margin: 12px 0 0; }
-.install .meta code { word-break: break-all; }
-.oneliner { display: flex; align-items: stretch; gap: 8px; min-width: 0; }
-.oneliner pre { flex: 1 1 auto; min-width: 0; margin: 0; white-space: pre; }
-.copy {
-  flex: 0 0 auto;
-  font: inherit;
-  font-size: 0.92rem;
-  font-weight: 600;
-  min-width: 5.5em;
+/* Push buttons, as AppKit draws them: a hairline, the text colour, no fill of their own. */
+.button, .copy {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 32px;
   padding: 0 14px;
-  border: 0;
-  border-radius: 8px;
-  background: var(--accent);
-  color: var(--accent-text);
+  font: 600 13px/1 var(--font);
+  color: var(--text);
+  background: var(--bg);
+  border: 1px solid var(--divider-strong);
+  border-radius: var(--radius-sm);
+  text-decoration: none;
   cursor: pointer;
 }
-.copy:hover { filter: brightness(1.08); }
-.copy:focus-visible { outline: 3px solid var(--accent); outline-offset: 3px; }
-.copy.copied { background: var(--code-bg); color: var(--text); }
+.button:hover, .copy:hover { background: var(--code-bg); }
+.button:active, .copy:active { background: var(--divider); }
 
-/* ---------- screenshot */
-.shot { margin: 16px 0 40px; }
+/* ---------- terminal install */
+.install { margin: 0 0 24px; }
+.install h2 { margin: 0 0 4px; font-size: 17px; }
+.install p { margin: 0 0 12px; }
+.install .meta { margin: 10px 0 0; }
+.install .meta code { word-break: break-all; }
+.oneliner { display: flex; align-items: stretch; gap: 8px; min-width: 0; }
+.oneliner pre { flex: 1 1 auto; min-width: 0; white-space: pre; }
+.copy { flex: 0 0 auto; min-width: 5.5em; }
+.copy.copied { background: var(--code-bg); }
+
+.download { display: flex; flex-wrap: wrap; align-items: center; gap: 8px 16px; margin: 0; }
+
+/* ---------- screenshot: the real window at its real size (2x PNG shown at 1100 CSS px) */
+main > .shot { max-width: 1100px; margin: 8px auto 48px; }
 .shot img {
   display: block;
-  max-width: 100%;
+  width: 100%;
   height: auto;
-  border: 1px solid var(--border);
-  border-radius: 14px;
-  box-shadow: 0 12px 32px rgba(0, 0, 0, 0.08);
+  /* The PNG keeps the window's rounded, transparent corners. A hairline follows them, and the
+     window gets the shadow macOS gives every window: the page's only shadow, because this is the
+     only thing on it that is a window rather than a document. */
+  filter: drop-shadow(0 0 0.75px var(--window-edge)) drop-shadow(0 8px 24px var(--window-shadow));
 }
 
-/* ---------- features */
-.features { display: grid; grid-template-columns: repeat(3, 1fr); gap: 24px; margin: 0 0 48px; }
-.features h2 { margin: 0 0 6px; font-size: 1.05rem; }
-.features p { margin: 0; color: var(--muted); font-size: 0.95rem; }
-
-/* ---------- first launch + verify */
-section > h2 { font-size: 1.35rem; margin: 0 0 12px; }
-.first-launch {
-  background: var(--surface);
-  border: 1px solid var(--border);
-  border-radius: 12px;
-  padding: 24px;
-  margin: 0 0 40px;
+/* ---------- sections, separated by the app's horizontal rule instead of boxes */
+.features, .first-launch, .verify {
+  border-top: 1px solid var(--divider);
+  padding-top: 32px;
+  margin-bottom: 40px;
 }
-.first-launch ol { padding-left: 1.3em; }
-.first-launch li { margin-bottom: 10px; }
+section > h2 { font-size: 24px; margin: 0 0 12px; }
+
+.features { display: grid; grid-template-columns: repeat(3, 1fr); gap: 24px; }
+.features h2 { margin: 0 0 4px; font-size: 17px; }
+.features p { margin: 0; }
+
+.first-launch p { margin: 0 0 12px; }
+.first-launch ol { margin: 0 0 12px; padding-left: 20px; }
+.first-launch li { margin-bottom: 8px; padding-left: 4px; }
+.first-launch li::marker { color: var(--muted); }
 .ui { font-style: italic; }
+/* The app has no warning colour; this is its block quote (3px bar, 16px indent) at full text colour. */
 .warn {
-  background: var(--warn-bg);
-  border: 1px solid var(--warn-border);
-  border-radius: 8px;
-  padding: 12px 14px;
-  margin-bottom: 0;
+  margin: 20px 0 0;
+  padding: 2px 0 2px 16px;
+  border-left: 3px solid var(--divider-strong);
 }
 
-.verify { margin: 0 0 48px; }
+.verify p { margin: 0 0 12px; }
 .hash {
   display: block;
   user-select: all;
   -webkit-user-select: all;
   word-break: break-all;
   padding: 10px 12px;
+  border-radius: var(--radius-sm);
+  font-size: 13.5px;
 }
+.verify pre { margin-bottom: 0; }
 
 /* ---------- footer */
 footer {
+  width: min(var(--column), 100% - 56px);
+  margin-inline: auto;
   display: flex;
   flex-wrap: wrap;
   gap: 8px 24px;
-  padding-top: 24px;
-  padding-bottom: 48px;
-  border-top: 1px solid var(--border);
-  font-size: 0.92rem;
+  padding: 20px 0 48px;
+  border-top: 1px solid var(--divider);
+  font-size: 13px;
 }
 
 @media (max-width: 640px) {
-  .hero { padding-top: 40px; }
-  .features { grid-template-columns: 1fr; gap: 18px; }
-  .first-launch { padding: 18px 16px; }
-  .install { padding: 18px 16px; }
+  main { padding-inline: 16px; }
+  footer { width: calc(100% - 32px); }
+  .hero { padding-top: 32px; }
+  .identity { gap: 12px; margin-bottom: 20px; }
+  .app-icon { width: 64px; height: 64px; }
+  h1 { font-size: 24px; }
+  .features { grid-template-columns: 1fr; gap: 16px; }
   .oneliner { flex-direction: column; }
-  .copy { padding: 10px 14px; }
+  .copy { min-height: 36px; }
+  main > .shot { margin-bottom: 32px; }
 }
 
 @media (prefers-reduced-motion: reduce) {
-  * { transition: none !important; animation: none !important; }
+  *, *::before, *::after { transition: none !important; animation: none !important; scroll-behavior: auto !important; }
 }

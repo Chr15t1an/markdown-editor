@@ -13,9 +13,13 @@ final class MainWindowController: NSWindowController, NSWindowDelegate {
     private(set) lazy var session = FileSession(editor: editor)
     private(set) var folder: URL?
 
-    init() {
+    /// The app's one theme, handed to every view that draws with it.
+    let theme: Theme
+
+    init(theme: Theme = Theme()) {
+        self.theme = theme
         let window = NSWindow(
-            contentRect: NSRect(x: 0, y: 0, width: 1100, height: 750),
+            contentRect: NSRect(origin: .zero, size: theme.defaultWindowSize),
             styleMask: [.titled, .closable, .miniaturizable, .resizable, .fullSizeContentView],
             backing: .buffered, defer: false)
         window.title = "Markdown Editor"
@@ -23,18 +27,21 @@ final class MainWindowController: NSWindowController, NSWindowDelegate {
         window.tabbingMode = .disallowed
         super.init(window: window)
         window.delegate = self
+        editor.styler.theme = theme
+        sidebar.theme = theme
 
         let sidebarItem = NSSplitViewItem(sidebarWithViewController: sidebar)
-        sidebarItem.minimumThickness = 180
-        sidebarItem.maximumThickness = 420
+        sidebarItem.minimumThickness = theme.sidebarMinWidth
+        sidebarItem.maximumThickness = theme.sidebarMaxWidth
         sidebarItem.canCollapse = true
         let editorItem = NSSplitViewItem(viewController: editor)
-        editorItem.minimumThickness = 320
+        editorItem.minimumThickness = theme.editorMinWidth
         splitViewController.addSplitViewItem(sidebarItem)
         splitViewController.addSplitViewItem(editorItem)
         splitViewController.splitView.autosaveName = "MainSplit"
 
-        let drop = DropView(frame: NSRect(x: 0, y: 0, width: 1100, height: 750))
+        let drop = DropView(frame: NSRect(origin: .zero, size: theme.defaultWindowSize))
+        drop.theme = theme
         let split = splitViewController.view
         split.frame = drop.bounds
         split.autoresizingMask = [.width, .height]
@@ -44,7 +51,7 @@ final class MainWindowController: NSWindowController, NSWindowDelegate {
         root.view = drop
         root.addChild(splitViewController)
         window.contentViewController = root
-        window.setContentSize(NSSize(width: 1100, height: 750))
+        window.setContentSize(theme.defaultWindowSize)
         window.center()
         window.setFrameAutosaveName("MainWindow")
 

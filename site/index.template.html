@@ -11,9 +11,9 @@
 <meta property="og:title" content="Markdown Editor — a free, open markdown editor for Mac">
 <meta property="og:description" content="Typora-style inline editing. Drop a folder on it to open it. No account, no vault. MIT-licensed.">
 <meta property="og:image" content="https://markdown.chri5tian.com/screenshot.png">
-<meta property="og:image:width" content="1100">
-<meta property="og:image:height" content="750">
-<meta property="og:image:alt" content="Markdown Editor with a folder of notes in the sidebar and a note rendered inline: headings, a list and a table">
+<meta property="og:image:width" content="2200">
+<meta property="og:image:height" content="1500">
+<meta property="og:image:alt" content="Markdown Editor with a folder of notes in the sidebar and Welcome.md rendered inline: headings, lists, a table, a block quote and a code block">
 <meta name="twitter:card" content="summary_large_image">
 <link rel="icon" href="/favicon.svg" type="image/svg+xml">
 <link rel="icon" href="/favicon-32.png" sizes="32x32" type="image/png">
@@ -23,7 +23,10 @@
 <body>
 <main>
   <header class="hero">
-    <p class="app-name"><img class="app-icon" src="/apple-touch-icon.png" width="28" height="28" alt="">Markdown Editor</p>
+    <div class="identity">
+      <img class="app-icon" src="/app-icon-512.png" width="80" height="80" alt="">
+      <p class="app-name">Markdown Editor</p>
+    </div>
     <h1>A free, open markdown editor for Mac</h1>
     <p class="lede">I wanted Typora's one-pane editing without the price tag, so I built a small native version.
       Markdown renders in place as you type, and any folder you drop on it opens as a file tree.
@@ -45,8 +48,11 @@
   </header>
 
   <figure class="shot">
-    <img src="/screenshot.png" width="1100" height="750"
-         alt="Markdown Editor with a folder of notes in the sidebar and a note rendered inline: headings, a list and a table">
+    <picture>
+      <source srcset="/screenshot-dark.png" media="(prefers-color-scheme: dark)">
+      <img src="/screenshot.png" width="2200" height="1500"
+           alt="Markdown Editor with a folder of notes in the sidebar and Welcome.md rendered inline: headings, lists, a table, a block quote and a code block">
+    </picture>
   </figure>
 
   <section class="features" aria-label="Features">

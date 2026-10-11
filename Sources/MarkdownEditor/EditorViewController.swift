@@ -3,13 +3,18 @@ import MarkdownCore
 
 /// The editing pane: a TextKit 1 NSTextView in a scroll view, plus an empty-state label.
 final class EditorViewController: NSViewController, NSTextViewDelegate, NSTextStorageDelegate {
-    static let readableWidth: CGFloat = 760
-    static let minimumInset: CGFloat = 28
-
     let textStorage = NSTextStorage()
     let layoutManager = EditorLayoutManager()
     let hiding = MarkerHidingLayoutDelegate()
-    var styler = MarkdownStyler()
+    /// The editor's styler. Its theme is the one every part of the pane draws with: setting it
+    /// hands the theme to the layout manager and the marker-hiding delegate too.
+    var styler = MarkdownStyler() {
+        didSet {
+            layoutManager.theme = styler.theme
+            hiding.theme = styler.theme
+        }
+    }
+    var theme: Theme { styler.theme }
     private(set) var document = MarkdownDocument("")
     /// Character range touched by edits since the last restyle (post-edit coordinates).
     private var pendingEdit: NSRange?
@@ -50,10 +55,10 @@ final class EditorViewController: NSViewController, NSTextViewDelegate, NSTextSt
         tv.autoresizingMask = [.width]
         tv.minSize = NSSize(width: 0, height: 0)
         tv.maxSize = NSSize(width: CGFloat.greatestFiniteMagnitude, height: CGFloat.greatestFiniteMagnitude)
-        tv.textContainerInset = NSSize(width: Self.minimumInset, height: 24)
-        tv.font = styler.theme.bodyFont
-        tv.defaultParagraphStyle = styler.theme.paragraphStyle()
-        tv.typingAttributes = styler.theme.bodyAttributes
+        tv.textContainerInset = NSSize(width: theme.editorInsetHorizontalMin, height: theme.editorInsetVertical)
+        tv.font = theme.bodyFont
+        tv.defaultParagraphStyle = theme.paragraphStyle()
+        tv.typingAttributes = theme.bodyAttributes
         tv.delegate = self
         tv.onOpen = onOpen
         tv.setAccessibilityIdentifier("editor")
@@ -63,11 +68,11 @@ final class EditorViewController: NSViewController, NSTextViewDelegate, NSTextSt
         scrollView.hasVerticalScroller = true
         scrollView.autohidesScrollers = true
         scrollView.drawsBackground = true
-        scrollView.backgroundColor = .textBackgroundColor
+        scrollView.backgroundColor = theme.backgroundColor
         scrollView.contentView.postsFrameChangedNotifications = true
 
-        emptyLabel.textColor = .tertiaryLabelColor
-        emptyLabel.font = .systemFont(ofSize: 17)
+        emptyLabel.textColor = theme.emptyStateColor
+        emptyLabel.font = theme.emptyStateFont
         emptyLabel.alignment = .center
 
         let container = NSView()
@@ -98,9 +103,9 @@ final class EditorViewController: NSViewController, NSTextViewDelegate, NSTextSt
     /// Centers a readable column of text in wide windows.
     private func updateInsets() {
         let width = scrollView.contentView.bounds.width
-        let horizontal = max(Self.minimumInset, (width - Self.readableWidth) / 2)
+        let horizontal = max(theme.editorInsetHorizontalMin, (width - theme.readableWidth) / 2)
         if abs(textView.textContainerInset.width - horizontal) > 0.5 {
-            textView.textContainerInset = NSSize(width: horizontal, height: 24)
+            textView.textContainerInset = NSSize(width: horizontal, height: theme.editorInsetVertical)
         }
         let containerWidth = max(100, width - 2 * horizontal)
         if abs(textContainer.size.width - containerWidth) > 0.5 {
@@ -125,7 +130,7 @@ final class EditorViewController: NSViewController, NSTextViewDelegate, NSTextSt
         emptyLabel.isHidden = true
         scrollView.isHidden = false
         textStorage.beginEditing()
-        textStorage.setAttributedString(NSAttributedString(string: text, attributes: styler.theme.bodyAttributes))
+        textStorage.setAttributedString(NSAttributedString(string: text, attributes: theme.bodyAttributes))
         textStorage.endEditing()
         undo.removeAllActions()
         let length = (text as NSString).length
@@ -195,7 +200,9 @@ final class EditorViewController: NSViewController, NSTextViewDelegate, NSTextSt
             MainActor.assumeIsolated {
                 guard let self, let url = ImageCache.resolve(info.source, relativeTo: self.baseURL),
                       let image = self.images.image(for: url) else { return nil }
-                return ImageCache.scaledSize(ImageCache.size(of: image), toWidth: self.imageWidth).height + ImageCache.gap
+                let theme = self.theme
+                return ImageCache.scaledSize(ImageCache.size(of: image), toWidth: self.imageWidth,
+                                             maxHeight: theme.imageMaxHeight).height + theme.imageGap
             }
         }
         images.onLoad = { [weak self] _ in self?.restyleAll() }
@@ -203,7 +210,7 @@ final class EditorViewController: NSViewController, NSTextViewDelegate, NSTextSt
             MainActor.assumeIsolated {
                 guard let self, let url = ImageCache.resolve(info.source, relativeTo: self.baseURL),
                       let image = self.images.image(for: url) else { return }
-                let size = ImageCache.scaledSize(ImageCache.size(of: image), toWidth: rect.width)
+                let size = ImageCache.scaledSize(ImageCache.size(of: image), toWidth: rect.width, maxHeight: self.theme.imageMaxHeight)
                 let target = NSRect(x: rect.minX, y: rect.minY, width: size.width, height: size.height)
                 image.draw(in: target, from: .zero, operation: .sourceOver, fraction: 1, respectFlipped: true, hints: nil)
             }

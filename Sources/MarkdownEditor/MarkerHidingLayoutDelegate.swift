@@ -14,6 +14,8 @@ final class MarkerHidingLayoutDelegate: NSObject, NSLayoutManagerDelegate {
     var selection = NSRange(location: 0, length: 0)
     /// Ranges of the blocks the selection touches; `.line` markers in them are shown.
     var revealedBlocks: [NSRange] = []
+    /// Set by the editor from its styler's theme.
+    var theme = Theme()
 
     func isHidden(_ reveal: MarkerReveal, at charIndex: Int) -> Bool {
         !reveal.isRevealed(at: charIndex, selection: selection, blockRanges: revealedBlocks)
@@ -68,9 +70,6 @@ final class MarkerHidingLayoutDelegate: NSObject, NSLayoutManagerDelegate {
         return NSRect(x: glyphPosition.x, y: glyphPosition.y, width: width, height: proposedRect.height)
     }
 
-    /// Height a table's delimiter row keeps while hidden: a strip for the header rule.
-    static let hiddenDelimiterHeight: CGFloat = 9
-
     /// A table's delimiter row (`|---|---|`) collapses to a thin strip while hidden, instead of a
     /// blank line between the header and the body. Only that row: an empty body row (`||`) is all
     /// hidden markers too, but keeps its height.
@@ -85,7 +84,7 @@ final class MarkerHidingLayoutDelegate: NSObject, NSLayoutManagerDelegate {
               storage.attribute(.mdTableDelimiter, at: chars.location, effectiveRange: nil) != nil,
               let reveal = storage.attribute(.mdMarker, at: chars.location, effectiveRange: nil) as? MarkerReveal,
               isHidden(reveal, at: chars.location) else { return false }
-        let h = Self.hiddenDelimiterHeight
+        let h = theme.tableDelimiterStripHeight
         lineFragmentRect.pointee.size.height = h
         lineFragmentUsedRect.pointee.size.height = min(lineFragmentUsedRect.pointee.height, h)
         baselineOffset.pointee = min(baselineOffset.pointee, h)

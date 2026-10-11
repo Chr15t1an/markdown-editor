@@ -127,9 +127,6 @@ public struct MarkdownStyler: @unchecked Sendable {
     /// Width a table row may use (the text column minus line padding); set by the editor. Nil or
     /// 0 (no layout yet): tables are laid out unconstrained, and restyled when the width is known.
     public var tableWidth: () -> CGFloat? = { nil }
-    /// Space on each side of a column boundary.
-    public static let tableGutter: CGFloat = 12
-
     public init(theme: Theme = Theme()) { self.theme = theme }
 
     /// Measured table-row widths, shared by copies of this styler.
@@ -188,14 +185,16 @@ public struct MarkdownStyler: @unchecked Sendable {
     private func base(for kind: BlockKind, markerWidth: CGFloat) -> (NSFont, NSParagraphStyle, NSColor) {
         switch kind {
         case .heading(let level):
-            let spacing: CGFloat = level <= 2 ? 10 : 6
-            return (theme.headingFont(level: level), theme.paragraphStyle(spacingBefore: spacing, lineHeightMultiple: 1.15), theme.textColor)
+            return (theme.headingFont(level: level),
+                    theme.paragraphStyle(spacingBefore: theme.headingSpacing(level: level), lineHeightMultiple: theme.headingLineHeightMultiple),
+                    theme.textColor)
         case .bulletItem, .orderedItem, .taskItem:
             return (theme.bodyFont, theme.paragraphStyle(headIndent: markerWidth), theme.textColor)
         case .blockquote:
             return (theme.bodyFont, theme.paragraphStyle(headIndent: theme.quoteIndent, firstLineHeadIndent: theme.quoteIndent), theme.quoteColor)
         case .fencedCode:
-            return (theme.codeFont, theme.paragraphStyle(headIndent: 12, firstLineHeadIndent: 12, lineHeightMultiple: 1.2), theme.textColor)
+            return (theme.codeFont, theme.paragraphStyle(headIndent: theme.codeBlockIndent, firstLineHeadIndent: theme.codeBlockIndent,
+                                                         lineHeightMultiple: theme.codeLineHeightMultiple), theme.textColor)
         default:
             return (theme.bodyFont, theme.paragraphStyle(), theme.textColor)
         }
@@ -285,7 +284,7 @@ public struct MarkdownStyler: @unchecked Sendable {
                                _ storage: NSTextStorage) -> (TableGeometry, fits: Bool) {
         let available = tableWidth().flatMap { $0 > 0 ? $0 : nil } ?? .greatestFiniteMagnitude
         tableRowCache.fonts = [theme.bodySize, theme.codeSize]
-        let geometry = TableGeometry.compute(table, alignments, storage: storage, gutter: Self.tableGutter, cache: tableRowCache)
+        let geometry = TableGeometry.compute(table, alignments, storage: storage, gutter: theme.tableGutter, cache: tableRowCache)
         return (geometry, geometry.rowWidths.allSatisfy { $0 <= available - 2 })
     }
 
