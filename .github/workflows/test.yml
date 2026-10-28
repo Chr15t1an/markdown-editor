@@ -1,0 +1,39 @@
+# Run the test suite on every push to a branch other than main, and on pull requests. Known
+# failures are allowlisted in scripts/known-test-failures.txt (scripts/check-test-failures.sh).
+# scripts/verify-outcome.sh waits on this workflow (by name: "Test") for a given sha.
+name: Test
+
+on:
+  push:
+    branches-ignore: [main]
+  pull_request:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: test-${{ github.ref }}
+  cancel-in-progress: true
+
+defaults:
+  run:
+    shell: bash
+
+jobs:
+  test:
+    runs-on: macos-26
+    timeout-minutes: 30
+    env:
+      DEVELOPER_DIR: /Applications/Xcode.app/Contents/Developer   # the path scripts/test.sh exports: one build for both steps
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - name: Toolchain
+        run: |
+          xcode-select -p
+          swift --version
+      - name: Build (package and tests)
+        run: swift build --build-tests
+      - name: Tests (known failures allowlisted in scripts/known-test-failures.txt)
+        run: scripts/check-test-failures.sh
