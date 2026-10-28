@@ -68,6 +68,7 @@ final class FileSession: NSObject, NSFilePresenter, @unchecked Sendable {
     /// current edits cannot be saved and the user keeps them, or when `url` cannot be read.
     @MainActor @discardableResult
     func open(_ url: URL) -> Bool {
+        guard !ImageFile.isImage(url) else { return false }   // images go to the viewer, never into the text buffer
         let url = url.standardizedFileURL
         if url == currentURL { return true }
         let contents: FileContents

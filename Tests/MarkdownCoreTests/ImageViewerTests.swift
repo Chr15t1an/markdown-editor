@@ -201,3 +201,142 @@ final class ImageViewerViewTests: XCTestCase {
         XCTAssertEqual(v.url?.lastPathComponent, "b.png")
     }
 }
+
+@MainActor
+final class ImageViewingTests: XCTestCase {
+    var dir: URL!
+    var other: URL?
+    let defaults = UserDefaults.standard
+
+    override func setUp() async throws {
+        dir = try fixtureDirectory("viewing")
+        try FileManager.default.createDirectory(at: dir.appendingPathComponent("sub"), withIntermediateDirectories: true)
+        try "n\n".write(to: dir.appendingPathComponent("note.md"), atomically: true, encoding: .utf8)
+        try writeTestImage(dir.appendingPathComponent("pic.png"), width: 640, height: 480)
+        try writeTestImage(dir.appendingPathComponent("sub/deep.png"), width: 32, height: 32)
+    }
+
+    override func tearDown() async throws {
+        defaults.removeObject(forKey: MainWindowController.lastFolderKey)
+        defaults.removeObject(forKey: MainWindowController.lastFileKey)
+        try? FileManager.default.removeItem(at: dir)
+        if let other { try? FileManager.default.removeItem(at: other) }
+    }
+
+    private func url(_ name: String) -> URL { dir.appendingPathComponent(name).standardizedFileURL }
+    private func path(_ name: String) -> String { url(name).path }
+
+    func testSelectingAnImageSavesTheNoteAndShowsTheViewer() throws {
+        let c = MainWindowController()
+        c.open(dir)
+        c.open(url("note.md"))
+        let tv = c.editor.textView!
+        tv.insertText("more", replacementRange: NSRange(location: (c.editor.text as NSString).length, length: 0))
+        c.sidebar.reveal(url("pic.png"))
+        c.sidebar.onSelectFile?(url("pic.png"))
+        XCTAssertNil(c.session.currentURL)
+        XCTAssertEqual(c.viewedImage?.path, path("pic.png"))
+        XCTAssertTrue(c.editor.isShowingImage)
+        XCTAssertEqual(try String(contentsOf: url("note.md"), encoding: .utf8), "n\nmore")
+        XCTAssertEqual(c.sidebar.selectedFile?.path, path("pic.png"))
+
+        c.sidebar.onSelectFile?(url("note.md"))
+        XCTAssertEqual(c.session.currentURL?.path, path("note.md"))
+        XCTAssertNil(c.viewedImage)
+        XCTAssertFalse(c.editor.isShowingImage)
+        c.session.close()
+    }
+
+    func testRelaunchRestoresAnImage() {
+        defaults.set(dir.path, forKey: MainWindowController.lastFolderKey)
+        defaults.set(path("pic.png"), forKey: MainWindowController.lastFileKey)
+        let c = MainWindowController()
+        c.restoreLastSession()
+        XCTAssertEqual(c.viewedImage?.path, path("pic.png"))
+        XCTAssertEqual(c.sidebar.selectedFile?.path, path("pic.png"))
+        XCTAssertNil(c.session.currentURL)
+        XCTAssertTrue(c.editor.isShowingImage)
+    }
+
+    func testOpeningAnImageFromOutsideRootsItsFolder() throws {
+        let c = MainWindowController()
+        c.open(dir)
+        XCTAssertTrue(c.open(url("sub/deep.png")))
+        XCTAssertEqual(c.folder?.path, dir.standardizedFileURL.path, "sub is inside the root: the root stays")
+        XCTAssertEqual(c.viewedImage?.path, path("sub/deep.png"))
+
+        let elsewhere = try fixtureDirectory("viewing-other")
+        other = elsewhere
+        let o = elsewhere.appendingPathComponent("o.png")
+        try writeTestImage(o, width: 10, height: 10)
+        XCTAssertTrue(c.open(o))
+        XCTAssertEqual(c.folder?.path, elsewhere.standardizedFileURL.path)
+        XCTAssertEqual(c.viewedImage?.path, o.standardizedFileURL.path)
+    }
+
+    func testDeletedImageShowsTheEmptyState() throws {
+        let c = MainWindowController()
+        c.open(url("pic.png"))
+        XCTAssertEqual(c.viewedImage?.path, path("pic.png"))
+        try FileManager.default.removeItem(at: url("pic.png"))
+        c.viewedImageMayHaveChanged([path("pic.png")])
+        XCTAssertNil(c.viewedImage)
+        XCTAssertFalse(c.editor.isShowingImage)
+        XCTAssertNil(c.sidebar.selectedFile)
+        XCTAssertNil(defaults.string(forKey: MainWindowController.lastFileKey))
+    }
+
+    func testNewNoteWithAnImageSelectedGoesInItsFolder() {
+        let c = MainWindowController()
+        c.open(dir)
+        c.open(url("sub/deep.png"))
+        c.newNote()
+        XCTAssertEqual(c.session.currentURL?.path, path("sub/Untitled.md"))
+        XCTAssertFalse(c.editor.isShowingImage)
+        c.session.close()
+    }
+
+    func testNewNoteFromAnImagePutsTheCursorInTheNote() {
+        let c = MainWindowController()
+        c.open(dir)
+        c.open(url("pic.png"))
+        c.newNote()
+        XCTAssertTrue(c.window?.firstResponder === c.editor.textView, "⌘N puts the cursor in the new note")
+        c.session.close()
+    }
+
+    func testArrowingOntoANoteKeepsSidebarFocus() {
+        let c = MainWindowController()
+        c.open(dir)
+        c.open(url("pic.png"))
+        XCTAssertTrue(c.window?.firstResponder === c.sidebar.outlineView, "showing an image focuses the sidebar")
+        c.sidebar.selectionByKeys = true
+        c.sidebar.onSelectFile?(url("note.md"))
+        XCTAssertEqual(c.session.currentURL?.path, path("note.md"))
+        XCTAssertTrue(c.window?.firstResponder === c.sidebar.outlineView, "arrowing onto a note keeps sidebar focus")
+
+        c.sidebar.selectionByKeys = false
+        c.sidebar.onSelectFile?(url("pic.png"))
+        c.sidebar.onSelectFile?(url("note.md"))
+        XCTAssertTrue(c.window?.firstResponder === c.editor.textView, "a click still focuses the text")
+        c.session.close()
+    }
+
+    func testSessionRefusesAnImage() {
+        let c = MainWindowController()
+        c.open(dir)
+        XCTAssertFalse(c.session.open(url("pic.png")))
+        XCTAssertNil(c.session.currentURL)
+    }
+
+    func testSubtitleShowsPixelSizeOnceLoaded() async {
+        let c = MainWindowController()
+        c.open(dir)
+        let loaded = expectation(description: "image decoded")
+        let previous = c.editor.onImageLoad
+        c.editor.onImageLoad = { info in previous?(info); loaded.fulfill() }
+        c.open(url("pic.png"))
+        await fulfillment(of: [loaded], timeout: 5)
+        XCTAssertEqual(c.window?.subtitle, "pic.png — 640 × 480")
+    }
+}

@@ -12,6 +12,10 @@ final class MainWindowController: NSWindowController, NSWindowDelegate {
     let editor = EditorViewController()
     private(set) lazy var session = FileSession(editor: editor)
     private(set) var folder: URL?
+    /// The image file the pane is showing (nil while a note or nothing is shown).
+    private(set) var viewedImage: URL?
+    /// Its modification date when shown: an FSEvents batch reloads it only when this moved.
+    private var viewedImageDate: Date?
 
     /// The app's one theme, handed to every view that draws with it.
     let theme: Theme
@@ -56,8 +60,13 @@ final class MainWindowController: NSWindowController, NSWindowDelegate {
         window.setFrameAutosaveName("MainWindow")
 
         editor.onOpen = { [weak self] url in self?.open(url) }
-        sidebar.onSelectFile = { [weak self] url in self?.openFile(url) }
+        sidebar.onSelectFile = { [weak self] url in
+            guard let self else { return }
+            self.openFile(url, focusEditor: !self.sidebar.selectionByKeys)   // arrowing keeps focus in the sidebar (decision 39)
+        }
         configureSession()
+        editor.onImageLoad = { [weak self] info in self?.imageLoaded(info) }
+        sidebar.onFilesChanged = { [weak self] paths in self?.viewedImageMayHaveChanged(paths) }
         ProbeLog.shared.window = self
     }
 
@@ -76,7 +85,7 @@ final class MainWindowController: NSWindowController, NSWindowDelegate {
             alert.messageText = "Couldn’t open “\(url.lastPathComponent)”"
             alert.informativeText = error.localizedDescription
             alert.beginSheetModal(for: window)
-            self?.sidebar.selectFile(self?.session.currentURL)
+            self?.sidebar.selectFile(self?.session.currentURL ?? self?.viewedImage)
         }
     }
 
@@ -85,7 +94,7 @@ final class MainWindowController: NSWindowController, NSWindowDelegate {
 
     // MARK: Opening
 
-    /// Every open path lands here: a folder, or a markdown file. A file inside the current root
+    /// Every open path lands here: a folder, or a markdown or image file. A file inside the current root
     /// is selected in place; a file elsewhere opens its parent folder as the new root.
     /// Returns false when nothing changed (unopenable URL, or unsaved edits kept).
     @discardableResult
@@ -115,6 +124,8 @@ final class MainWindowController: NSWindowController, NSWindowDelegate {
         window?.title = url.lastPathComponent
         window?.representedURL = url
         sidebar.setRoot(url)
+        viewedImage = nil
+        viewedImageDate = nil
         editor.showEmpty("Select a file")
         updateSubtitle()
         UserDefaults.standard.set(url.path, forKey: Self.lastFolderKey)
@@ -124,22 +135,74 @@ final class MainWindowController: NSWindowController, NSWindowDelegate {
     }
 
     @discardableResult
-    private func openFile(_ url: URL) -> Bool {
+    private func openFile(_ url: URL, focusEditor: Bool = true) -> Bool {
+        if ImageFile.isImage(url) { return showImage(url) }
         guard session.open(url) else {
-            sidebar.selectFile(session.currentURL)   // put the selection back on the open file
+            sidebar.selectFile(session.currentURL ?? viewedImage)   // put the selection back on what is shown
             return false
         }
+        viewedImage = nil
+        viewedImageDate = nil
         updateSubtitle()
         UserDefaults.standard.set(url.standardizedFileURL.path, forKey: Self.lastFileKey)
-        editor.focus()
+        if focusEditor { editor.focus() }   // false only for plain-key navigation in the sidebar (decision 39)
         ProbeLog.shared.dump()
         return true
+    }
+
+    // MARK: Images
+
+    /// Shows an image read-only. Leaving the open note follows the same rule as switching notes:
+    /// it is saved, or the user explicitly discards, or nothing changes.
+    @discardableResult
+    private func showImage(_ url: URL) -> Bool {
+        let url = url.standardizedFileURL
+        if url.path == viewedImage?.path, editor.isShowingImage { return true }
+        guard session.close() else {
+            sidebar.selectFile(session.currentURL)
+            return false
+        }
+        viewedImage = url
+        viewedImageDate = FileStore.modificationDate(url)
+        editor.showImage(url)
+        updateSubtitle()
+        UserDefaults.standard.set(url.path, forKey: Self.lastFileKey)
+        window?.makeFirstResponder(sidebar.outlineView)   // arrow keys keep stepping through the folder
+        ProbeLog.shared.dump()
+        return true
+    }
+
+    private func imageLoaded(_ info: ImageFile.Info?) {
+        guard let image = viewedImage else { return }
+        if info == nil { editor.showEmpty("“\(image.lastPathComponent)” can’t be displayed") }
+        updateSubtitle()
+        ProbeLog.shared.dump()
+    }
+
+    /// FSEvents batch from the sidebar: the image on screen may have been deleted, renamed or rewritten.
+    func viewedImageMayHaveChanged(_ paths: [String]) {
+        guard let image = viewedImage else { return }
+        guard FileManager.default.fileExists(atPath: image.path) else {
+            viewedImage = nil
+            viewedImageDate = nil
+            editor.showEmpty("“\(image.lastPathComponent)” was deleted or moved to the Trash")
+            sidebar.selectFile(nil)
+            updateSubtitle()
+            UserDefaults.standard.removeObject(forKey: Self.lastFileKey)
+            return
+        }
+        let target = image.resolvingSymlinksInPath().path
+        guard paths.contains(where: { URL(fileURLWithPath: $0).resolvingSymlinksInPath().path == target }) else { return }
+        let date = FileStore.modificationDate(image)
+        guard date != viewedImageDate else { return }   // metadata-only event (xattrs): keep the zoom (decision 37)
+        viewedImageDate = date
+        editor.showImage(image)   // rewritten in place: show the new pixels
     }
 
     // MARK: New note
 
     /// File › New. With a folder open: creates the next free `Untitled.md` in the folder the
-    /// sidebar selection is in (else the open file's folder, else the root), selects it and puts
+    /// sidebar selection is in (else the open file's or shown image's folder, else the root), selects it and puts
     /// the cursor in it. With no folder: a Save panel picks the file, and its folder opens.
     func newNote() {
         guard let root = folder else { newNoteWithSavePanel(); return }
@@ -149,6 +212,7 @@ final class MainWindowController: NSWindowController, NSWindowDelegate {
         // and the session follows a moved note.
         let candidate = sidebar.selectedDirectory
             ?? session.currentURL?.deletingLastPathComponent().standardizedFileURL
+            ?? viewedImage?.deletingLastPathComponent().standardizedFileURL
             ?? root
         let dir = Self.isInside(candidate, root) ? candidate : root
         let url: URL
@@ -207,10 +271,7 @@ final class MainWindowController: NSWindowController, NSWindowDelegate {
               let target = OpenTarget.resolve(URL(fileURLWithPath: folderPath)), target.file == nil else { return }
         let filePath = defaults.string(forKey: Self.lastFileKey)
         guard setFolder(target.folder) else { return }
-        guard let filePath else { return }
-        let file = URL(fileURLWithPath: filePath).standardizedFileURL
-        guard file.path.hasPrefix(target.folder.path + "/"), FolderTree.isMarkdown(file),
-              FileManager.default.fileExists(atPath: file.path) else { return }
+        guard let file = OpenTarget.restorableFile(filePath, in: target.folder) else { return }
         sidebar.reveal(file)
         openFile(file)
     }
@@ -224,6 +285,11 @@ final class MainWindowController: NSWindowController, NSWindowDelegate {
     // MARK: Save problems
 
     private func updateSubtitle() {
+        if let image = viewedImage {
+            window?.subtitle = editor.imageViewer.info.map { ImageFile.subtitle(name: image.lastPathComponent, info: $0) }
+                ?? image.lastPathComponent
+            return
+        }
         guard let url = session.currentURL else { window?.subtitle = ""; return }
         if let error = session.lastSaveError {
             window?.subtitle = "\(url.lastPathComponent) — Not saved: \(error.localizedDescription)"
@@ -285,6 +351,9 @@ final class MainWindowController: NSWindowController, NSWindowDelegate {
             "selection": [sel.location, sel.length],
             "editorIsFirstResponder": window?.firstResponder === tv,
             "text": editor.text,
+            "image": viewedImage?.path ?? "",
+            "imageSize": editor.imageViewer.info.map { [$0.pixelWidth, $0.pixelHeight] } ?? [],
+            "magnification": Double(editor.imageViewer.scrollView.magnification),
         ]
     }
 

@@ -7,6 +7,12 @@ final class SidebarViewController: NSViewController, NSOutlineViewDataSource, NS
     let outlineView = NSOutlineView()
     private(set) var root: FileNode?
     var onSelectFile: ((URL) -> Void)?
+    /// True when the latest user selection came from plain keys in the outline (arrows,
+    /// type-select), not a click or a ⌘ shortcut.
+    var selectionByKeys = false
+    /// Every FSEvents batch under the root, after the tree is updated (the shown image may have
+    /// been deleted or rewritten).
+    var onFilesChanged: (([String]) -> Void)?
     /// Set by the window controller; read when cells are made.
     var theme = Theme()
     private var watcher: FolderWatcher?
@@ -117,13 +123,14 @@ final class SidebarViewController: NSViewController, NSOutlineViewDataSource, NS
                 }
             }
         }
-        guard !dirty.isEmpty else { return }
+        guard !dirty.isEmpty else { onFilesChanged?(paths); return }
         let selected = selectedFile
         for node in dirty {
             node.reload()
             outlineView.reloadItem(node === root ? nil : node, reloadChildren: true)
         }
         if let selected { reveal(selected) }
+        onFilesChanged?(paths)
         ProbeLog.shared.dump()
     }
 
@@ -161,7 +168,9 @@ final class SidebarViewController: NSViewController, NSOutlineViewDataSource, NS
         cell.textField?.stringValue = node.name
         cell.imageView?.image = node.isDirectory
             ? NSImage(systemSymbolName: "folder", accessibilityDescription: "Folder")
-            : NSImage(systemSymbolName: "doc.text", accessibilityDescription: "Markdown file")
+            : node.isImage
+                ? NSImage(systemSymbolName: "photo", accessibilityDescription: "Image")
+                : NSImage(systemSymbolName: "doc.text", accessibilityDescription: "Markdown file")
         return cell
     }
 
@@ -187,6 +196,10 @@ final class SidebarViewController: NSViewController, NSOutlineViewDataSource, NS
 
     func outlineViewSelectionDidChange(_ notification: Notification) {
         guard !isRevealing, let file = selectedFile else { return }
+        // AppKit calls this synchronously inside the outline's keyDown, so the current event says
+        // whether the arrows moved the selection (decision 39). ⌘ shortcuts are not navigation.
+        let event = NSApp?.currentEvent   // NSApp is nil in a test process that never touched NSApplication.shared
+        selectionByKeys = event?.type == .keyDown && !(event?.modifierFlags.contains(.command) ?? false)
         onSelectFile?(file)
     }
 }

@@ -88,7 +88,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate, EditorMenuActions, NSM
         panel.canChooseDirectories = true
         panel.canChooseFiles = true
         panel.allowsMultipleSelection = false
-        panel.allowedContentTypes = [.folder] + FolderTree.markdownExtensions.compactMap { UTType(filenameExtension: $0) }
+        panel.allowedContentTypes = [.folder]
+            + FolderTree.markdownExtensions.union(ImageFile.extensions).compactMap { UTType(filenameExtension: $0) }
         panel.prompt = "Open"
         guard panel.runModal() == .OK, let url = panel.url else { return }
         windowController?.open(url)
