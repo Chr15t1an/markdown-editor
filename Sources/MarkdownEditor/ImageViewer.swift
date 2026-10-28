@@ -128,11 +128,15 @@ final class ImageViewer: NSView {
         isFitting = true
     }
 
-    /// The visible area in points: the scroll view's content size less its insets (the title bar
-    /// under a full-size content view). Before the first layout, the window or default size.
+    /// The visible area in points: the scroll view's content size without scrollers, less its
+    /// insets (the title bar under a full-size content view). A fitted image never needs scrollers,
+    /// so a legacy scroller shown while the image is still at full size must not shrink the fit.
+    /// Before the first layout, the window or default size.
     private func availableSize() -> CGSize {
         let insets = scrollView.contentInsets
-        let size = scrollView.contentSize
+        let size = NSScrollView.contentSize(
+            forFrameSize: scrollView.frame.size, horizontalScrollerClass: nil, verticalScrollerClass: nil,
+            borderType: scrollView.borderType, controlSize: .regular, scrollerStyle: scrollView.scrollerStyle)
         let available = CGSize(width: size.width - insets.left - insets.right,
                                height: size.height - insets.top - insets.bottom)
         if available.width > 0, available.height > 0 { return available }

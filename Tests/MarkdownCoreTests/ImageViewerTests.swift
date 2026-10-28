@@ -142,7 +142,9 @@ final class ImageViewerViewTests: XCTestCase {
         try writeTestImage(url, width: 2000, height: 1000)
         let v = makeViewer()
         _ = await showAndWait(v, url)
-        let expected = ImageFile.fitScale(CGSize(width: 2000, height: 1000), in: v.scrollView.contentSize)
+        // The whole 400×300 pane, not `contentSize`: a legacy scroller (no trackpad on the runner)
+        // may still be shown, and a fitted image needs none.
+        let expected = ImageFile.fitScale(CGSize(width: 2000, height: 1000), in: v.bounds.size)
         XCTAssertEqual(v.scrollView.magnification, expected, accuracy: 0.001)
         XCTAssertLessThan(expected, 1)
         XCTAssertEqual(v.imageView.frame.size, NSSize(width: 2000, height: 1000))
