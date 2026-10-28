@@ -6,6 +6,17 @@ uses the section verbatim as the GitHub Release notes, and the release-note post
 (`ops/announce/`) post from it, so the first line of a section is the one-sentence summary.
 
 Heading format: `## X.Y.Z — YYYY-MM-DD` (the version must match `scripts/check-version.sh`).
+`## Unreleased` collects changes until the next release, when it is renamed to `## X.Y.Z — YYYY-MM-DD`.
+
+## Unreleased
+
+Images in an opened folder are listed in the sidebar and open in a read-only viewer.
+
+- PNG, JPEG, GIF, HEIC/HEIF, WebP, TIFF, BMP and AVIF files appear beside the notes with a photo icon.
+- Selecting one shows it fitted to the window (never enlarged), with pinch to zoom; GIFs animate and
+  the arrow keys step through the folder. The subtitle shows its size in pixels.
+- Dropping an image, or Finder › Open With › Markdown Editor, opens its folder with it selected;
+  Preview stays the default app for images.
 
 ## 0.4.0 — 2026-10-11
 

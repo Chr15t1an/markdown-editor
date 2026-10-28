@@ -7,7 +7,7 @@
 # no primitive tier because AppKit owns the raw values and resolves them per appearance.
 version: 1
 name: Markdown Editor
-description: Native macOS markdown editor that renders formatting in place as you type; the UI must make reading and writing one plain .md file at a time effortless.
+description: Native macOS markdown editor that renders formatting in place as you type; the UI must make reading and writing one plain .md file at a time effortless, and let you glance at the images beside it.
 
 colors:
   # Semantic tier only. Light/dark resolve inside AppKit. "Theme.x" = the property in Theme.swift
@@ -96,7 +96,7 @@ motion:
 
 components:
   editor:        { backgroundColor: "{background}", textColor: "{text}", font: "{typography.document-body}", maxWidth: "{spacing.readable-width}" }
-  sidebar-row:   { textColor: "{text-ui}", font: "{typography.ui-body}", selectedBackground: "{selection}", selectedText: "{on-selection}", icon: "SF Symbol folder / doc.text @ {spacing.sidebar-icon-size}" }
+  sidebar-row:   { textColor: "{text-ui}", font: "{typography.ui-body}", selectedBackground: "{selection}", selectedText: "{on-selection}", icon: "SF Symbol folder / doc.text / photo @ {spacing.sidebar-icon-size}" }
   code-block:    { backgroundColor: "{code-background}", font: "{typography.document-code}", rounded: "{rounded.sm}", indent: "{spacing.code-block-indent}" }
   inline-code:   { backgroundColor: "{code-background}", font: "{typography.document-code}" }
   block-quote:   { textColor: "{text-secondary}", bar: "{strokes.quote-bar}", indent: "{spacing.quote-indent}" }
@@ -106,6 +106,7 @@ components:
   table:         { headerWeight: 700, headerRule: "{strokes.table-header-rule}", rowRule: "{strokes.table-row-rule}", gutter: "{spacing.table-gutter}" }
   drop-target:   { stroke: "{strokes.drop-highlight}" }
   empty-state:   { textColor: "{text-secondary}", font: "{typography.ui-empty-state}" }
+  image-viewer:  { backgroundColor: "{background}", fit: "never above 100 % (one image pixel per point)", zoom: "pinch, AppKit default max 4×" }
 ---
 
 ## Overview
@@ -114,7 +115,7 @@ Markdown Editor is a small, free, native macOS app (AppKit, Swift package, macOS
 Silicon) for people who want Typora's shape without the price or a vault: one pane, markdown
 rendered in place as you type, and any folder you drop on it opened as a sidebar file tree. The
 one thing the UI must make easy is reading and writing a single plain `.md` file without ever
-switching modes. The mood is calm and sparse: a reading surface with a file list beside it, no
+switching modes. Images in the folder can be viewed, never edited. The mood is calm and sparse: a reading surface with a file list beside it, no
 toolbar, no status bar, nothing that competes with the text.
 
 The platform provides almost everything: SF Pro and SF Mono, the semantic colour set and its
@@ -136,7 +137,7 @@ exactly; change both in the same commit.
   `quaternarySystemFill`). No literal hex anywhere in `Sources/`.
 - The 760pt readable column centred in wide windows, with a 28pt minimum side inset and 24pt top.
 - The source-list sidebar (`NSOutlineView` `.sourceList` style, SF Symbols `folder` /
-  `doc.text`, 180–420pt wide, collapsible with ⌘⇧L).
+  `doc.text` / `photo`, 180–420pt wide, collapsible with ⌘⇧L).
 - Full-size-content window, title = folder name with its proxy icon, subtitle = file name (and
   "Not saved: …" when a save fails). No toolbar.
 - Block chrome drawn by `EditorLayoutManager`: code-block fill at radius 5, a 3pt quote bar, a
@@ -250,7 +251,7 @@ document.
 ## Layout
 
 Two panes in an `NSSplitViewController`: the sidebar (180–420pt, collapsible, ⌘⇧L) and the editor
-(min 320pt). The window opens at 1100×750, full-size content view, and restores its frame and
+(min 320pt), which shows the selected image instead when an image row is selected. The window opens at 1100×750, full-size content view, and restores its frame and
 split position. There is no toolbar and no status bar; the title bar carries the folder name with
 its proxy icon and the file name as subtitle.
 
@@ -327,7 +328,7 @@ drop-target outline (a window-sized frame, so a larger radius). There are no car
 avatars or sheets of the app's own, so no `lg` or `full` level is defined; add one when a second
 use appears, and keep one radius per hierarchy level rather than one per view.
 
-Icons are SF Symbols at the sidebar's 16pt: `folder` and `doc.text`, regular weight, matching the
+Icons are SF Symbols at the sidebar's 16pt: `folder`, `doc.text` and `photo`, regular weight, matching the
 row's text style. No other icons exist. Illustration: none; the empty state is a sentence.
 
 ### Brand
@@ -409,27 +410,39 @@ back. Too wide for the column: stays as source with pipes in `text-tertiary` —
 480pt high), source hidden; a missing or remote image shows the source text in
 `text-secondary` and reserves nothing. Images never load over the network.
 
+**Image viewer (`ImageViewer` in `EditorViewController`)** — an image file, read-only, in place
+of the text. Default: the image centred on `background`, fitted to the pane and never above 100 %
+(one image pixel per point), decoded off the main thread at the size on screen. Zoom: pinch, up to
+AppKit's 4×, then scroll; pinching back to fit makes a window resize re-fit it. GIFs animate; other
+formats show their first frame. Focus stays on the sidebar, so the arrow keys step through the
+rows. Read-only: no edit, rotate or delete. Error: the empty state "“Name” can’t be displayed".
+Deleted: "“Name” was deleted or moved to the Trash".
+
 **Sidebar (`SidebarViewController`)** — source-list outline of the open folder. Default row:
 icon + name in `text-ui`. Hover: none (source lists do not hover). Selected, window
 key: system `selection` fill with `on-selection` text. Selected, window not key: macOS 26 draws an
 unemphasized pale grey fill with the name in the accent colour. Both are the system's
 (`NSTableView` emphasis), never drawn by the app. Selection is persistent and also moves the
-editor to that file. Focus: the outline's system focus ring and keyboard navigation (arrows, type-to-select).
+editor to that file (a note) or shows it in the image viewer (an image). Focus: the outline's system focus ring and keyboard navigation (arrows, type-to-select).
+Arrow keys keep focus in the sidebar, so you can step through notes and images. Click the text to type.
 Expanded/collapsed: the disclosure triangle. External change: rows reload in place and the
 selection is kept. Empty folder: the outline is simply empty; the editor's empty state carries
 the message.
 
-**Drop target (`DropView`)** — the whole window. Drag of an openable folder or `.md` file over
+**Drop target (`DropView`)** — the whole window. Drag of an openable folder, `.md` or image file over
 it: a 3pt `primary` stroke, radius 8, inset 3, over everything. Exit or drop: it disappears.
-Non-openable drag: nothing (the operation is refused, no stroke).
+Non-openable drag: nothing (the operation is refused, no stroke). An image dragged onto the text
+of an open note is left to the text view.
 
-**Window** — title = folder name (proxy icon drag-able), subtitle = file name, or
+**Window** — title = folder name (proxy icon drag-able), subtitle = file name (for an image,
+`name — W × H` in pixels), or
 "File.md — Not saved: reason" while a save is failing. No toolbar. Close with unsaved
 *unsaveable* edits: the Keep Editing / Discard Changes sheet; saves that succeed never prompt.
 
 **Empty state** — centred `ui-empty-state` text in the editor pane: "Drop a folder here" at
 launch with nothing restored, "Select a file" when a folder is open and no file is, "“Name” was
-deleted or moved to the Trash" when the open file disappears. One sentence, no button; the action
+deleted or moved to the Trash" when the open file disappears, "“Name” can’t be displayed" when
+an image fails to decode. One sentence, no button; the action
 is the drag or the sidebar.
 
 **Alerts** — `NSAlert` sheets only: open failure ("Couldn’t open “X”"), create failure

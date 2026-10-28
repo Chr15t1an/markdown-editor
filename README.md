@@ -9,8 +9,9 @@ Typora is the right shape for editing markdown — one pane, WYSIWYG, open any f
 - Typora-style inline editing: markdown syntax renders in place while you type, no preview toggle —
   including GitHub-style pipe tables.
 - Drag a folder onto the window or the Dock icon and it opens to that folder, with a sidebar file tree.
+- Images in the folder (PNG, JPEG, GIF, HEIC/HEIF, WebP, TIFF, BMP, AVIF) are listed in the sidebar beside the notes and open read-only, fitted to the window, with pinch to zoom. Finder's Open With lists the app for those formats without replacing Preview.
 
-Anything beyond that (themes, export, plugins) is out of scope until it's actually missed.
+Anything beyond that (themes, export, plugins, editing images) is out of scope until it's actually missed.
 
 ## Install
 

@@ -340,3 +340,27 @@ final class ImageViewingTests: XCTestCase {
         XCTAssertEqual(c.window?.subtitle, "pic.png — 640 × 480")
     }
 }
+
+final class InfoPlistTests: XCTestCase {
+    func testEveryImageExtensionIsRegisteredAsAnAlternateViewer() throws {
+        let plist = URL(fileURLWithPath: #filePath)   // Tests/MarkdownCoreTests/<file>, three levels below the repo
+            .deletingLastPathComponent().deletingLastPathComponent().deletingLastPathComponent()
+            .appendingPathComponent("Resources/Info.plist")
+        let data = try Data(contentsOf: plist)
+        guard let root = try PropertyListSerialization.propertyList(from: data, format: nil) as? [String: Any],
+              let types = root["CFBundleDocumentTypes"] as? [[String: Any]],
+              let image = types.first(where: { $0["CFBundleTypeName"] as? String == "Image" }) else {
+            XCTFail("no Image document type in \(plist.path)")
+            return
+        }
+        XCTAssertEqual(image["CFBundleTypeRole"] as? String, "Viewer")
+        XCTAssertEqual(image["LSHandlerRank"] as? String, "Alternate", "Preview stays the default")
+        let listed = (image["LSItemContentTypes"] as? [String] ?? []).compactMap { UTType($0) }
+        XCTAssertFalse(listed.isEmpty)
+        for ext in ImageFile.extensions.sorted() {
+            guard let type = UTType(filenameExtension: ext) else { XCTFail("\(ext): no UTType"); continue }
+            XCTAssertTrue(listed.contains { type.conforms(to: $0) },
+                          "\(ext) → \(type.identifier) is not covered by the Image document type")
+        }
+    }
+}
