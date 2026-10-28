@@ -6,7 +6,7 @@ import MarkdownCore
 /// zoomed. Decodes off the main thread at the size on screen, and again sharper after a zoom.
 @MainActor
 final class ImageViewer: NSView {
-    let scrollView = NSScrollView()
+    let scrollView = ZoomScrollView()
     let imageView = NSImageView()
     private(set) var url: URL?
     /// Facts of the image on screen; nil while loading or when it could not be decoded.
@@ -14,9 +14,12 @@ final class ImageViewer: NSView {
     /// Long side, in pixels, of the bitmap on screen (0 while loading).
     private(set) var decodedPixelSize = 0
     private var requestedPixelSize = 0
-    /// True until the user pinches: a resize then keeps the image fitted.
+    /// True until the user zooms (pinch or smart magnify): a resize then keeps the image fitted.
     private(set) var isFitting = true
     private var generation = 0
+    /// The one decode in flight. A newer show, a sharper re-decode or `clear()` cancels it, so
+    /// holding an arrow key through large photos never queues a decode per row passed.
+    private(set) var decodeTask: Task<Void, Never>?
     /// Called on the main queue once a shown image is decoded (nil: it could not be).
     var onLoad: ((ImageFile.Info?) -> Void)?
     var theme = Theme() { didSet { scrollView.backgroundColor = theme.backgroundColor } }
@@ -34,6 +37,7 @@ final class ImageViewer: NSView {
         imageView.imageScaling = .scaleAxesIndependently   // the frame carries the aspect ratio
         imageView.animates = true
         imageView.setAccessibilityIdentifier("image-viewer")
+        scrollView.onSmartMagnify = { [weak self] in self?.smartMagnified() }
         scrollView.translatesAutoresizingMaskIntoConstraints = false
         addSubview(scrollView)
         NSLayoutConstraint.activate([
@@ -58,21 +62,26 @@ final class ImageViewer: NSView {
         let url = url.standardizedFileURL
         clear()
         self.url = url
+        imageView.setAccessibilityLabel(url.lastPathComponent)
         let gen = generation
         let viewport = availableSize()
         let scale = window?.backingScaleFactor ?? 2
-        Task.detached(priority: .userInitiated) {
+        decodeTask = Task.detached(priority: .userInitiated) {
+            guard !Task.isCancelled else { return }   // a newer selection came first: never decode this one
             guard let info = ImageFile.info(at: url) else {
                 await MainActor.run { [weak self] in self?.apply(nil, gif: nil, info: nil, generation: gen) }
                 return
             }
             if info.isAnimated {
                 let data = try? Data(contentsOf: url)   // NSImage(data:) keeps every GIF frame
+                guard !Task.isCancelled else { return }
                 await MainActor.run { [weak self] in self?.apply(nil, gif: data, info: info, generation: gen) }
             } else {
                 let fit = ImageFile.fitScale(CGSize(width: info.pixelWidth, height: info.pixelHeight), in: viewport)
                 let side = ImageFile.pixelSize(for: info, magnification: fit, backingScale: scale)
+                guard !Task.isCancelled else { return }
                 let loaded = ImageFile.load(url, maxPixelSize: side)
+                guard !Task.isCancelled else { return }
                 await MainActor.run { [weak self] in self?.apply(loaded, gif: nil, info: info, generation: gen) }
             }
         }
@@ -80,6 +89,8 @@ final class ImageViewer: NSView {
 
     /// Releases the image (the pane is showing something else).
     func clear() {
+        decodeTask?.cancel()
+        decodeTask = nil
         generation += 1
         url = nil
         info = nil
@@ -87,6 +98,7 @@ final class ImageViewer: NSView {
         requestedPixelSize = 0
         isFitting = true
         imageView.image = nil
+        imageView.setAccessibilityLabel(nil)
     }
 
     private func apply(_ loaded: ImageFile.Loaded?, gif: Data?, info newInfo: ImageFile.Info?, generation gen: Int) {
@@ -151,15 +163,25 @@ final class ImageViewer: NSView {
         guard needed > max(decodedPixelSize, requestedPixelSize) else { return }
         requestedPixelSize = needed
         let gen = generation
-        Task.detached(priority: .userInitiated) {
+        decodeTask?.cancel()   // only a smaller re-decode can be in flight here: this one supersedes it
+        decodeTask = Task.detached(priority: .userInitiated) {
+            guard !Task.isCancelled else { return }
             let loaded = ImageFile.load(url, maxPixelSize: needed)
+            guard !Task.isCancelled else { return }
             await MainActor.run { [weak self] in self?.apply(loaded, gif: nil, info: info, generation: gen) }
         }
     }
 
     override func layout() {
         super.layout()
-        if isFitting, info != nil { fit(); refreshResolution() }
+        guard isFitting, info != nil else { return }
+        fit()
+        if !inLiveResize { refreshResolution() }   // a live resize re-decodes once, when it ends
+    }
+
+    override func viewDidEndLiveResize() {
+        super.viewDidEndLiveResize()
+        refreshResolution()
     }
 
     override func viewDidChangeBackingProperties() {
@@ -172,6 +194,31 @@ final class ImageViewer: NSView {
     @objc private func didEndMagnify(_ note: Notification) {
         if scrollView.magnification <= scrollView.minMagnification + 0.001 { isFitting = true }
         refreshResolution()
+    }
+
+    /// A two-finger double tap zoomed (AppKit animates it and posts no live-magnify
+    /// notifications): leave fit mode like a pinch, then, once the animation is over, re-enter
+    /// it if the zoom went back to fit, and decode sharper if needed.
+    func smartMagnified() {
+        isFitting = false
+        let gen = generation
+        Task { @MainActor [weak self] in
+            try? await Task.sleep(for: .milliseconds(400))
+            guard let self, gen == self.generation else { return }
+            if self.scrollView.magnification <= self.scrollView.minMagnification + 0.001 { self.isFitting = true }
+            self.refreshResolution()
+        }
+    }
+}
+
+/// The viewer's scroll view: reports a smart magnify (two-finger double tap), which AppKit
+/// handles without the live-magnify notifications a pinch posts.
+final class ZoomScrollView: NSScrollView {
+    var onSmartMagnify: (() -> Void)?
+
+    override func smartMagnify(with event: NSEvent) {
+        super.smartMagnify(with: event)
+        onSmartMagnify?()
     }
 }
 

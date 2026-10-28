@@ -410,13 +410,15 @@ back. Too wide for the column: stays as source with pipes in `text-tertiary` —
 480pt high), source hidden; a missing or remote image shows the source text in
 `text-secondary` and reserves nothing. Images never load over the network.
 
-**Image viewer (`ImageViewer` in `EditorViewController`)** — an image file, read-only, in place
-of the text. Default: the image centred on `background`, fitted to the pane and never above 100 %
-(one image pixel per point), decoded off the main thread at the size on screen. Zoom: pinch, up to
-AppKit's 4×, then scroll; pinching back to fit makes a window resize re-fit it. GIFs animate; other
-formats show their first frame. Focus stays on the sidebar, so the arrow keys step through the
-rows. Read-only: no edit, rotate or delete. Error: the empty state "“Name” can’t be displayed".
-Deleted: "“Name” was deleted or moved to the Trash".
+**Image viewer (`ImageViewer` in `EditorViewController`)** — an image file, read-only, in place of
+the text. Default: the image centred on `background`, fitted to the pane and never above 100 % (one
+image pixel per point), decoded off the main thread at the size on screen (only the newest
+selection is decoded; a live resize re-decodes once, at the end). VoiceOver reads the file name.
+Zoom: pinch or a two-finger double tap, up to AppKit's 4×, then scroll; a zoom is kept through a
+window resize, and zooming back to fit makes a resize re-fit it. GIFs animate; other formats show
+their first frame. Focus stays on the sidebar, so the arrow keys step through the rows. Read-only:
+no edit, rotate or delete. Error: the empty state "“Name” can’t be displayed". Deleted, trashed or
+renamed: "“Name” is no longer in the folder".
 
 **Sidebar (`SidebarViewController`)** — source-list outline of the open folder. Default row:
 icon + name in `text-ui`. Hover: none (source lists do not hover). Selected, window

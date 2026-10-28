@@ -200,6 +200,49 @@ final class ImageViewerViewTests: XCTestCase {
         XCTAssertEqual(v.info?.pixelWidth, 300)
         XCTAssertEqual(v.url?.lastPathComponent, "b.png")
     }
+
+    func testANewerShowCancelsTheDecodeInFlight() async throws {
+        let a = dir.appendingPathComponent("a.png")
+        let b = dir.appendingPathComponent("b.png")
+        try writeTestImage(a, width: 3000, height: 2000)
+        try writeTestImage(b, width: 300, height: 300)
+        let v = makeViewer()
+        v.show(a)
+        let first = v.decodeTask
+        XCTAssertNotNil(first)
+        let info = await showAndWait(v, b)
+        XCTAssertEqual(first?.isCancelled, true, "the older decode is cancelled, not queued")
+        XCTAssertEqual(info?.pixelWidth, 300)
+        let current = v.decodeTask
+        v.clear()
+        XCTAssertNil(v.decodeTask)
+        XCTAssertEqual(current?.isCancelled, true, "clear() cancels too")
+    }
+
+    func testSmartMagnifyLeavesFitModeSoAResizeKeepsTheZoom() async throws {
+        let url = dir.appendingPathComponent("wide.png")
+        try writeTestImage(url, width: 2000, height: 1000)
+        let v = makeViewer()
+        _ = await showAndWait(v, url)
+        XCTAssertTrue(v.isFitting)
+        v.scrollView.magnification = 1   // where a two-finger double tap zooms to
+        v.smartMagnified()
+        XCTAssertFalse(v.isFitting)
+        window.setContentSize(NSSize(width: 600, height: 400))
+        v.layoutSubtreeIfNeeded()
+        XCTAssertEqual(v.scrollView.magnification, 1, accuracy: 0.001, "the zoom survives a resize")
+        XCTAssertEqual(v.scrollView.onSmartMagnify != nil, true, "the scroll view reports smart magnify")
+    }
+
+    func testImageViewIsLabelledWithTheFileName() async throws {
+        let url = dir.appendingPathComponent("Sunset.png")
+        try writeTestImage(url, width: 10, height: 10)
+        let v = makeViewer()
+        _ = await showAndWait(v, url)
+        XCTAssertEqual(v.imageView.accessibilityLabel(), "Sunset.png")
+        v.clear()
+        XCTAssertNil(v.imageView.accessibilityLabel())
+    }
 }
 
 @MainActor

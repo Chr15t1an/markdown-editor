@@ -185,7 +185,7 @@ final class MainWindowController: NSWindowController, NSWindowDelegate {
         guard FileManager.default.fileExists(atPath: image.path) else {
             viewedImage = nil
             viewedImageDate = nil
-            editor.showEmpty("“\(image.lastPathComponent)” was deleted or moved to the Trash")
+            editor.showEmpty("“\(image.lastPathComponent)” is no longer in the folder")   // deleted, trashed or renamed
             sidebar.selectFile(nil)
             updateSubtitle()
             UserDefaults.standard.removeObject(forKey: Self.lastFileKey)
