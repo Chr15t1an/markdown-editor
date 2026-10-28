@@ -102,3 +102,100 @@ final class ImageFileTests: XCTestCase {
         XCTAssertEqual(ImageFile.subtitle(name: "a.png", info: info(1920, 1080)), "a.png — 1920 × 1080")
     }
 }
+
+/// Collects what `ImageViewer.onLoad` reports.
+@MainActor
+private final class LoadLog {
+    var infos: [ImageFile.Info?] = []
+}
+
+@MainActor
+final class ImageViewerViewTests: XCTestCase {
+    var dir: URL!
+    var window: NSWindow!
+    override func setUp() async throws { dir = try fixtureDirectory("viewer") }
+    override func tearDown() async throws { window?.close(); try? FileManager.default.removeItem(at: dir) }
+
+    /// A 400×300 viewer hosted in a borderless window, laid out (decision 30).
+    private func makeViewer() -> ImageViewer {
+        let v = ImageViewer(frame: NSRect(x: 0, y: 0, width: 400, height: 300))
+        window = NSWindow(contentRect: v.frame, styleMask: [.borderless], backing: .buffered, defer: false)
+        window.isReleasedWhenClosed = false
+        window.contentView = v
+        v.layoutSubtreeIfNeeded()
+        XCTAssertGreaterThan(v.scrollView.contentSize.width, 0, "layout ran")
+        return v
+    }
+
+    /// Shows `url` and waits for the first `onLoad`.
+    private func showAndWait(_ v: ImageViewer, _ url: URL) async -> ImageFile.Info? {
+        let loaded = expectation(description: "onLoad")
+        let log = LoadLog()
+        v.onLoad = { info in log.infos.append(info); loaded.fulfill() }
+        v.show(url)
+        await fulfillment(of: [loaded], timeout: 5)
+        return log.infos.first ?? nil
+    }
+
+    func testLargeImageIsFittedAndDecodedAtScreenSize() async throws {
+        let url = dir.appendingPathComponent("wide.png")
+        try writeTestImage(url, width: 2000, height: 1000)
+        let v = makeViewer()
+        _ = await showAndWait(v, url)
+        let expected = ImageFile.fitScale(CGSize(width: 2000, height: 1000), in: v.scrollView.contentSize)
+        XCTAssertEqual(v.scrollView.magnification, expected, accuracy: 0.001)
+        XCTAssertLessThan(expected, 1)
+        XCTAssertEqual(v.imageView.frame.size, NSSize(width: 2000, height: 1000))
+        XCTAssertEqual(v.info?.pixelWidth, 2000)
+        XCTAssertGreaterThan(v.decodedPixelSize, 0)
+        XCTAssertLessThan(v.decodedPixelSize, 2000, "decoded at screen size, not the full file")
+    }
+
+    func testSmallImageIsNeverUpscaledAndIsCentred() async throws {
+        let url = dir.appendingPathComponent("small.png")
+        try writeTestImage(url, width: 100, height: 50)
+        let v = makeViewer()
+        _ = await showAndWait(v, url)
+        XCTAssertEqual(v.scrollView.magnification, 1, accuracy: 0.001)
+        let clip = v.scrollView.contentView
+        let r = clip.constrainBoundsRect(NSRect(origin: .zero, size: clip.bounds.size))
+        XCTAssertEqual(r.origin.x, -(clip.bounds.width - 100) / 2, accuracy: 0.5)
+        XCTAssertEqual(r.origin.y, -(clip.bounds.height - 50) / 2, accuracy: 0.5)
+    }
+
+    func testUndecodableFileReportsNil() async throws {
+        let url = dir.appendingPathComponent("bad.png")
+        try "x".write(to: url, atomically: true, encoding: .utf8)
+        let v = makeViewer()
+        let info = await showAndWait(v, url)
+        XCTAssertNil(info)
+        XCTAssertNil(v.info)
+    }
+
+    func testNewerShowWins() async throws {
+        let a = dir.appendingPathComponent("a.png")
+        let b = dir.appendingPathComponent("b.png")
+        try writeTestImage(a, width: 200, height: 100)
+        try writeTestImage(b, width: 300, height: 300)
+        let v = makeViewer()
+        let log = LoadLog()
+        let loaded = expectation(description: "first image shown")
+        v.onLoad = { info in
+            log.infos.append(info)
+            if info != nil { loaded.fulfill() }
+        }
+        v.show(a)
+        v.show(b)
+        await fulfillment(of: [loaded], timeout: 5)
+        // Give a stale decode of `a` time to arrive (it must be dropped).
+        let settled = expectation(description: "settled")
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.5) { settled.fulfill() }
+        await fulfillment(of: [settled], timeout: 2)
+        let shown = log.infos.compactMap { $0 }
+        XCTAssertEqual(shown.count, 1)
+        XCTAssertEqual(shown.first?.pixelWidth, 300)
+        XCTAssertEqual(shown.first?.pixelHeight, 300)
+        XCTAssertEqual(v.info?.pixelWidth, 300)
+        XCTAssertEqual(v.url?.lastPathComponent, "b.png")
+    }
+}
