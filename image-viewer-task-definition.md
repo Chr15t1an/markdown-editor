@@ -5,8 +5,8 @@
 **User path:** yes — "Christian drops a folder with one `.md` and a set of images onto the window, sees the images listed in the sidebar next to the note, clicks one and sees it fitted in the right-hand pane, then arrow-keys through the rest."
 **Problem:** Image files in an opened folder are filtered out of the sidebar, and there is nowhere to show one.
 **Backed by:**
-- `FolderTree.swift:79`: `guard isDir || FolderTree.isMarkdown(childURL) else { continue }` drops every non-markdown file from the tree.
-- `OpenTarget.resolve` (`FolderTree.swift:101`) returns nil for any non-markdown file, so dropping or opening an image does nothing.
+- `FolderTree.swift:77`: `guard isDir || FolderTree.isMarkdown(childURL) else { continue }` drops every non-markdown file from the tree.
+- `OpenTarget.resolve` (`FolderTree.swift:100`) returns nil for any non-markdown file, so dropping or opening an image does nothing.
 - The detail pane is only ever `EditorViewController` (`MainWindowController.swift:37`). No view displays an image file on its own.
 
 **Status:** verified (code read). Not yet verified: SVG/WebP/HEIC rendering through `NSImage` on macOS 15, and how much memory large images use.
