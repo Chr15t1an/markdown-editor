@@ -99,19 +99,20 @@ final class MarkdownTextView: NSTextView, MarkdownFormatActions {
     }
 
     // MARK: Drops
+    // An image dropped on the note keeps NSTextView's handling instead of navigating away (decision 14).
 
     override func draggingEntered(_ sender: NSDraggingInfo) -> NSDragOperation {
-        if DropView.openableURL(from: sender) != nil { return .generic }
+        if DropView.openableURL(from: sender, includingImages: false) != nil { return .generic }
         return super.draggingEntered(sender)
     }
 
     override func draggingUpdated(_ sender: NSDraggingInfo) -> NSDragOperation {
-        if DropView.openableURL(from: sender) != nil { return .generic }
+        if DropView.openableURL(from: sender, includingImages: false) != nil { return .generic }
         return super.draggingUpdated(sender)
     }
 
     override func performDragOperation(_ sender: NSDraggingInfo) -> Bool {
-        if let url = DropView.openableURL(from: sender) {
+        if let url = DropView.openableURL(from: sender, includingImages: false) {
             onOpen?(url)
             return true
         }

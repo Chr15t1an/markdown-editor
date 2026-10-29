@@ -1,7 +1,7 @@
 import AppKit
 import MarkdownCore
 
-/// Window content view that accepts a dropped folder or markdown file anywhere in the window.
+/// Window content view that accepts a dropped folder, markdown or image file anywhere in the window.
 final class DropView: NSView {
     var onOpen: ((URL) -> Void)?
     var theme: Theme {
@@ -28,10 +28,15 @@ final class DropView: NSView {
         if subview !== highlight { addSubview(highlight, positioned: .above, relativeTo: nil) }
     }
 
-    static func openableURL(from info: NSDraggingInfo) -> URL? {
+    /// The first dragged URL the window can open. `includingImages: false` leaves image files out
+    /// (the note's text view keeps its own handling for those).
+    static func openableURL(from info: NSDraggingInfo, includingImages: Bool = true) -> URL? {
         let urls = info.draggingPasteboard.readObjects(
             forClasses: [NSURL.self], options: [.urlReadingFileURLsOnly: true]) as? [URL] ?? []
-        return urls.first { OpenTarget.resolve($0) != nil }
+        return urls.first { url in
+            guard let target = OpenTarget.resolve(url) else { return false }
+            return includingImages || !(target.file.map(ImageFile.isImage) ?? false)
+        }
     }
 
     override func draggingEntered(_ sender: NSDraggingInfo) -> NSDragOperation {

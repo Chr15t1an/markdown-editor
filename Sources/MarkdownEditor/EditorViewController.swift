@@ -1,7 +1,8 @@
 import AppKit
 import MarkdownCore
 
-/// The editing pane: a TextKit 1 NSTextView in a scroll view, plus an empty-state label.
+/// The editing pane: a TextKit 1 NSTextView in a scroll view, an empty-state label, and the
+/// read-only image viewer shown in place of the text when an image file is selected.
 final class EditorViewController: NSViewController, NSTextViewDelegate, NSTextStorageDelegate {
     let textStorage = NSTextStorage()
     let layoutManager = EditorLayoutManager()
@@ -26,6 +27,11 @@ final class EditorViewController: NSViewController, NSTextViewDelegate, NSTextSt
     private(set) var textView: MarkdownTextView!
     private let scrollView = NSScrollView()
     private let emptyLabel = NSTextField(labelWithString: "Drop a folder here")
+    /// Created hidden, so `isShowingImage` is false even before `loadView` runs.
+    let imageViewer: ImageViewer = { let v = ImageViewer(); v.isHidden = true; return v }()
+    /// Called once a shown image is decoded (nil: it could not be).
+    var onImageLoad: ((ImageFile.Info?) -> Void)?
+    var isShowingImage: Bool { !imageViewer.isHidden }
 
     /// Called after every user edit.
     var onTextChange: (() -> Void)?
@@ -75,17 +81,27 @@ final class EditorViewController: NSViewController, NSTextViewDelegate, NSTextSt
         emptyLabel.font = theme.emptyStateFont
         emptyLabel.alignment = .center
 
+        imageViewer.theme = theme
+        imageViewer.onLoad = { [weak self] info in self?.onImageLoad?(info) }
+
         let container = NSView()
-        for v in [scrollView, emptyLabel] { v.translatesAutoresizingMaskIntoConstraints = false; container.addSubview(v) }
+        // The label stays on top of both the text and the image viewer.
+        let views: [NSView] = [scrollView, imageViewer, emptyLabel]
+        for v in views { v.translatesAutoresizingMaskIntoConstraints = false; container.addSubview(v) }
         NSLayoutConstraint.activate([
             scrollView.leadingAnchor.constraint(equalTo: container.leadingAnchor),
             scrollView.trailingAnchor.constraint(equalTo: container.trailingAnchor),
             scrollView.topAnchor.constraint(equalTo: container.topAnchor),
             scrollView.bottomAnchor.constraint(equalTo: container.bottomAnchor),
+            imageViewer.leadingAnchor.constraint(equalTo: container.leadingAnchor),
+            imageViewer.trailingAnchor.constraint(equalTo: container.trailingAnchor),
+            imageViewer.topAnchor.constraint(equalTo: container.topAnchor),
+            imageViewer.bottomAnchor.constraint(equalTo: container.bottomAnchor),
             emptyLabel.centerXAnchor.constraint(equalTo: container.centerXAnchor),
             emptyLabel.centerYAnchor.constraint(equalTo: container.centerYAnchor),
         ])
         view = container
+        imageViewer.isHidden = true
         showEmpty("Drop a folder here")
 
         NotificationCenter.default.addObserver(
@@ -120,6 +136,7 @@ final class EditorViewController: NSViewController, NSTextViewDelegate, NSTextSt
     var text: String { textStorage.string }
 
     func showEmpty(_ message: String) {
+        hideImage()
         emptyLabel.stringValue = message
         emptyLabel.isHidden = false
         scrollView.isHidden = true
@@ -127,6 +144,7 @@ final class EditorViewController: NSViewController, NSTextViewDelegate, NSTextSt
 
     /// Replaces the whole document (file open / external reload). Not undoable.
     func load(_ text: String, selection: NSRange? = nil) {
+        hideImage()
         emptyLabel.isHidden = true
         scrollView.isHidden = false
         textStorage.beginEditing()
@@ -145,6 +163,19 @@ final class EditorViewController: NSViewController, NSTextViewDelegate, NSTextSt
     }
 
     func focus() { view.window?.makeFirstResponder(textView) }
+
+    /// Shows an image file read-only in place of the text. The caller has closed the session first.
+    func showImage(_ url: URL) {
+        emptyLabel.isHidden = true
+        scrollView.isHidden = true
+        imageViewer.isHidden = false
+        imageViewer.show(url)
+    }
+
+    private func hideImage() {
+        imageViewer.clear()
+        imageViewer.isHidden = true
+    }
 
     // MARK: NSTextViewDelegate
 

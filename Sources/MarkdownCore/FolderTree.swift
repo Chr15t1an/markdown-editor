@@ -7,6 +7,9 @@ public enum FolderTree {
     public static func isMarkdown(_ url: URL) -> Bool {
         markdownExtensions.contains(url.pathExtension.lowercased())
     }
+
+    /// Markdown or image: the files the sidebar lists and an open can select.
+    public static func isListed(_ url: URL) -> Bool { isMarkdown(url) || ImageFile.isImage(url) }
 }
 
 /// One entry in the sidebar tree. Directory children are read lazily, on first request.
@@ -18,6 +21,7 @@ public final class FileNode {
 
     public var name: String { url.lastPathComponent }
     public var isLoaded: Bool { children != nil }
+    public var isImage: Bool { !isDirectory && ImageFile.isImage(url) }
 
     public init(url: URL, isDirectory: Bool, parent: FileNode? = nil) {
         self.url = url.standardizedFileURL
@@ -74,7 +78,7 @@ public final class FileNode {
             let values = try? childURL.resourceValues(forKeys: Set(keys))
             if values?.isHidden == true { continue }
             let isDir = (values?.isDirectory ?? false) && !(values?.isPackage ?? false)
-            guard isDir || FolderTree.isMarkdown(childURL) else { continue }
+            guard isDir || FolderTree.isListed(childURL) else { continue }
             let standardized = childURL.standardizedFileURL
             if let old = existing[standardized], old.isDirectory == isDir {
                 nodes.append(old)
@@ -92,12 +96,25 @@ public final class FileNode {
 
 /// What an opened URL means for the window: a folder to show, and optionally a file in it.
 public enum OpenTarget {
+    /// A folder, or a markdown or image file: the folder to show and the file to select in it.
+    /// Nil for anything else, or a path that does not exist.
     public static func resolve(_ url: URL) -> (folder: URL, file: URL?)? {
         let url = url.standardizedFileURL
         var isDir: ObjCBool = false
         guard FileManager.default.fileExists(atPath: url.path, isDirectory: &isDir) else { return nil }
         if isDir.boolValue { return (url, nil) }
-        guard FolderTree.isMarkdown(url) else { return nil }
+        guard FolderTree.isListed(url) else { return nil }
         return (url.deletingLastPathComponent().standardizedFileURL, url)
+    }
+
+    /// The file a relaunch reopens: `path` when it names a listed kind (markdown or image) that
+    /// exists inside `folder`. Nil otherwise.
+    public static func restorableFile(_ path: String?, in folder: URL) -> URL? {
+        guard let path else { return nil }
+        let file = URL(fileURLWithPath: path).standardizedFileURL
+        let root = folder.standardizedFileURL.path
+        guard file.path.hasPrefix(root.hasSuffix("/") ? root : root + "/"), FolderTree.isListed(file),
+              FileManager.default.fileExists(atPath: file.path) else { return nil }
+        return file
     }
 }

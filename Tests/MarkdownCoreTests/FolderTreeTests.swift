@@ -34,6 +34,22 @@ final class FolderTreeTests: XCTestCase {
         XCTAssertEqual(root.children?.first?.isDirectory, true)
     }
 
+    func testListsImagesBesideMarkdown() throws {
+        for f in ["photo.PNG", "shot.jpeg", "anim.gif", "vector.svg"] {
+            try "x".write(to: dir.appendingPathComponent(f), atomically: true, encoding: .utf8)
+        }
+        let children = FileNode(url: dir, isDirectory: true).loadChildren()
+        let names = children.map(\.name)
+        for name in ["a.md", "B.markdown", "photo.PNG", "shot.jpeg", "anim.gif"] {
+            XCTAssertTrue(names.contains(name), name)
+        }
+        XCTAssertFalse(names.contains("c.txt"))
+        XCTAssertFalse(names.contains("vector.svg"), "SVG is not a listed image")
+        XCTAssertEqual(Array(names.prefix(3)), ["sub", "Sub 2", "Sub 10"])
+        XCTAssertEqual(children.first { $0.name == "photo.PNG" }?.isImage, true)
+        XCTAssertEqual(children.first { $0.name == "a.md" }?.isImage, false)
+    }
+
     func testChildrenAreLazy() {
         let root = FileNode(url: dir, isDirectory: true)
         XCTAssertFalse(root.isLoaded)
@@ -77,6 +93,40 @@ final class OpenTargetTests: XCTestCase {
 
         XCTAssertNil(OpenTarget.resolve(txt))
         XCTAssertNil(OpenTarget.resolve(dir.appendingPathComponent("missing.md")))
+    }
+
+    func testResolveImageOpensItsFolder() throws {
+        let dir = try fixtureDirectory("open-image")
+        defer { try? FileManager.default.removeItem(at: dir) }
+        let pic = dir.appendingPathComponent("Pic.JPG")
+        let svg = dir.appendingPathComponent("v.svg")
+        try "x".write(to: pic, atomically: true, encoding: .utf8)
+        try "x".write(to: svg, atomically: true, encoding: .utf8)
+        let target = OpenTarget.resolve(pic)
+        XCTAssertEqual(target?.folder.path, dir.standardizedFileURL.path)
+        XCTAssertEqual(target?.file?.path, pic.standardizedFileURL.path)
+        XCTAssertNil(OpenTarget.resolve(svg))
+        XCTAssertNil(OpenTarget.resolve(dir.appendingPathComponent("missing.png")))
+    }
+
+    func testRestorableFileAcceptsAnImage() throws {
+        let dir = try fixtureDirectory("restorable")
+        let other = try fixtureDirectory("restorable-other")
+        defer {
+            try? FileManager.default.removeItem(at: dir)
+            try? FileManager.default.removeItem(at: other)
+        }
+        for f in ["pic.png", "n.md", "x.txt"] {
+            try "x".write(to: dir.appendingPathComponent(f), atomically: true, encoding: .utf8)
+        }
+        try "x".write(to: other.appendingPathComponent("o.png"), atomically: true, encoding: .utf8)
+        func restored(_ url: URL) -> String? { OpenTarget.restorableFile(url.path, in: dir)?.path }
+        XCTAssertEqual(restored(dir.appendingPathComponent("pic.png")), dir.appendingPathComponent("pic.png").standardizedFileURL.path)
+        XCTAssertEqual(restored(dir.appendingPathComponent("n.md")), dir.appendingPathComponent("n.md").standardizedFileURL.path)
+        XCTAssertNil(restored(dir.appendingPathComponent("x.txt")))
+        XCTAssertNil(restored(other.appendingPathComponent("o.png")), "outside the folder")
+        XCTAssertNil(restored(dir.appendingPathComponent("gone.png")), "missing")
+        XCTAssertNil(OpenTarget.restorableFile(nil, in: dir))
     }
 }
 
