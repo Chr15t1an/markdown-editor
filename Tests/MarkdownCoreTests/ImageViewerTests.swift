@@ -117,8 +117,10 @@ final class ImageViewerViewTests: XCTestCase {
     override func tearDown() async throws { window?.close(); try? FileManager.default.removeItem(at: dir) }
 
     /// A 400×300 viewer hosted in a borderless window, laid out (decision 30).
-    private func makeViewer() -> ImageViewer {
-        let v = ImageViewer(frame: NSRect(x: 0, y: 0, width: 400, height: 300))
+    private func makeViewer(width: CGFloat = 400, height: CGFloat = 300,
+                            scrollers: NSScroller.Style? = nil) -> ImageViewer {
+        let v = ImageViewer(frame: NSRect(x: 0, y: 0, width: width, height: height))
+        if let scrollers { v.scrollView.scrollerStyle = scrollers }
         window = NSWindow(contentRect: v.frame, styleMask: [.borderless], backing: .buffered, defer: false)
         window.isReleasedWhenClosed = false
         window.contentView = v
@@ -163,6 +165,40 @@ final class ImageViewerViewTests: XCTestCase {
         let r = clip.constrainBoundsRect(NSRect(origin: .zero, size: clip.bounds.size))
         XCTAssertEqual(r.origin.x, -(clip.bounds.width - 100) / 2, accuracy: 0.5)
         XCTAssertEqual(r.origin.y, -(clip.bounds.height - 50) / 2, accuracy: 0.5)
+    }
+
+    /// The image's rect on screen is centred in the visible area of the scroll view (insets off).
+    private func assertCentred(_ v: ImageViewer, _ label: String, line: UInt = #line) {
+        v.layoutSubtreeIfNeeded()
+        let sv = v.scrollView
+        let image = v.imageView.convert(v.imageView.bounds, to: sv)
+        let insets = sv.contentInsets
+        var visible = sv.contentView.frame
+        visible.origin.x += insets.left
+        visible.size.width -= insets.left + insets.right
+        visible.origin.y += sv.isFlipped ? insets.top : insets.bottom
+        visible.size.height -= insets.top + insets.bottom
+        XCTAssertEqual(image.midX, visible.midX, accuracy: 1, "\(label): horizontally centred", line: line)
+        XCTAssertEqual(image.midY, visible.midY, accuracy: 1,
+                       "\(label): vertically centred (image \(image), visible \(visible))", line: line)
+    }
+
+    /// Walk F1: a 4:3 photo fitted by width in a taller pane sat flush at the bottom, because the
+    /// bounds were last centred against a clip frame that changed afterwards.
+    func testFittedPhotoIsCentredInThePane() async throws {
+        let url = dir.appendingPathComponent("photo.png")
+        try writeTestImage(url, width: 4000, height: 3000)
+        for style in [NSScroller.Style.legacy, .overlay] {
+            let v = makeViewer(width: 410, height: 361, scrollers: style)
+            _ = await showAndWait(v, url)
+            XCTAssertLessThan(v.scrollView.magnification, 0.2)
+            assertCentred(v, "\(style.rawValue) after load")
+            window.setContentSize(NSSize(width: 520, height: 470))
+            assertCentred(v, "\(style.rawValue) after a resize")
+            window.setContentSize(NSSize(width: 300, height: 400))
+            assertCentred(v, "\(style.rawValue) after a narrower resize")
+            window.close()
+        }
     }
 
     func testUndecodableFileReportsNil() async throws {
@@ -362,6 +398,28 @@ final class ImageViewingTests: XCTestCase {
         c.sidebar.onSelectFile?(url("pic.png"))
         c.sidebar.onSelectFile?(url("note.md"))
         XCTAssertTrue(c.window?.firstResponder === c.editor.textView, "a click still focuses the text")
+        c.session.close()
+    }
+
+    /// Walk report: Tab from the sidebar moved to the note and also left a tab in it. A real Tab
+    /// key event (not the probe's `key tab`, which calls insertTab on the text) must not edit.
+    func testTabFromTheSidebarDoesNotEditTheNote() throws {
+        let c = MainWindowController()
+        c.open(dir)
+        c.open(url("pic.png"))
+        c.sidebar.selectionByKeys = true
+        c.sidebar.onSelectFile?(url("note.md"))
+        guard let window = c.window else { XCTFail("no window"); return }
+        XCTAssertTrue(window.firstResponder === c.sidebar.outlineView)
+        let before = c.editor.text
+        for type in [NSEvent.EventType.keyDown, .keyUp] {
+            let tab = NSEvent.keyEvent(with: type, location: .zero, modifierFlags: [], timestamp: 0,
+                                       windowNumber: window.windowNumber, context: nil, characters: "\t",
+                                       charactersIgnoringModifiers: "\t", isARepeat: false, keyCode: 48)!
+            window.sendEvent(tab)
+        }
+        XCTAssertEqual(c.editor.text, before, "Tab only moves focus")
+        print("tab-from-sidebar: firstResponder is text view = \(window.firstResponder === c.editor.textView)")
         c.session.close()
     }
 
