@@ -137,9 +137,6 @@ final class ImageViewer: NSView {
         let scale = ImageFile.fitScale(CGSize(width: info.pixelWidth, height: info.pixelHeight), in: availableSize())
         scrollView.minMagnification = scale
         scrollView.magnification = scale
-        // Setting an unchanged magnification constrains nothing, and the clip frame may have
-        // changed since (scrollers hiding, the pane settling): centre against the current one.
-        (scrollView.contentView as? CenteringClipView)?.recentre()
         isFitting = true
     }
 
@@ -228,34 +225,21 @@ final class ZoomScrollView: NSScrollView {
 /// Keeps a document smaller than the visible area centred (Apple's PhotoEditor / Exhibition
 /// clip-view pattern), with the scroll view's content insets taken into account.
 final class CenteringClipView: NSClipView {
-    /// A new frame keeps the bounds origin, so a non-flipped view would leave the document at the
-    /// bottom: centre it again (walk F1).
-    override func setFrameSize(_ newSize: NSSize) {
-        super.setFrameSize(newSize)
-        recentre()
-    }
-
-    /// Moves the bounds to where `constrainBoundsRect` puts them, if they are elsewhere.
-    func recentre() {
-        let origin = constrainBoundsRect(bounds).origin
-        guard abs(origin.x - bounds.origin.x) > 0.01 || abs(origin.y - bounds.origin.y) > 0.01 else { return }
-        scroll(to: origin)
-        (superview as? NSScrollView)?.reflectScrolledClipView(self)
-    }
-
     override func constrainBoundsRect(_ proposedBounds: NSRect) -> NSRect {
         var rect = super.constrainBoundsRect(proposedBounds)
         guard let doc = documentView?.frame else { return rect }
-        let unit = frame.width > 0 ? rect.width / frame.width : 1   // document units per point
+        // The clip view's insets are already in document units (the scroll view's points times
+        // 1 / magnification), like `rect`: scaling them again hid the centring when zoomed out
+        // (walk F1: a fitted 8000 × 6000 photo sat flush with the bottom of the pane).
         let insets = contentInsets
-        let visibleWidth = rect.width - (insets.left + insets.right) * unit
-        let visibleHeight = rect.height - (insets.top + insets.bottom) * unit
+        let visibleWidth = rect.width - insets.left - insets.right
+        let visibleHeight = rect.height - insets.top - insets.bottom
         if visibleWidth > doc.width {
-            rect.origin.x = doc.minX - (visibleWidth - doc.width) / 2 - insets.left * unit
+            rect.origin.x = doc.minX - (visibleWidth - doc.width) / 2 - insets.left
         }
         if visibleHeight > doc.height {
             let lowInset = isFlipped ? insets.top : insets.bottom
-            rect.origin.y = doc.minY - (visibleHeight - doc.height) / 2 - lowInset * unit
+            rect.origin.y = doc.minY - (visibleHeight - doc.height) / 2 - lowInset
         }
         return rect
     }
