@@ -401,6 +401,39 @@ final class ImageViewingTests: XCTestCase {
         c.session.close()
     }
 
+    /// Walk F1 in the real window (titled, full-size content view, split view, default size):
+    /// a width-fitted camera photo was flush with the bottom of the pane instead of centred.
+    func testFittedPhotoIsCentredInTheMainWindow() throws {
+        let photo = url("camera.jpg")
+        try writeTestImage(photo, width: 8000, height: 6000, type: .jpeg)
+        let c = MainWindowController()
+        c.open(dir)
+        c.open(photo)
+        let v = c.editor.imageViewer
+        let deadline = Date().addingTimeInterval(20)
+        while v.info == nil, Date() < deadline { RunLoop.main.run(until: Date().addingTimeInterval(0.05)) }
+        XCTAssertNotNil(v.info, "decoded")
+        c.window?.layoutIfNeeded()
+        RunLoop.main.run(until: Date().addingTimeInterval(0.2))
+        let sv = v.scrollView, clip = sv.contentView
+        let image = v.imageView.convert(v.imageView.bounds, to: sv)
+        let insets = sv.contentInsets
+        var visible = clip.frame
+        visible.origin.x += insets.left
+        visible.size.width -= insets.left + insets.right
+        visible.origin.y += sv.isFlipped ? insets.top : insets.bottom
+        visible.size.height -= insets.top + insets.bottom
+        print("F1 probe: scroll \(sv.frame) flipped \(sv.isFlipped) insets \(insets) clip \(clip.frame) "
+              + "bounds \(clip.bounds) clipFlipped \(clip.isFlipped) doc \(v.imageView.frame) "
+              + "mag \(sv.magnification) image \(image) visible \(visible) "
+              + "scrollers \(sv.scrollerStyle.rawValue) h \(sv.horizontalScroller?.isHidden ?? true) "
+              + "v \(sv.verticalScroller?.isHidden ?? true)")
+        XCTAssertLessThan(sv.magnification, 0.2)
+        XCTAssertEqual(image.midX, visible.midX, accuracy: 1, "horizontally centred")
+        XCTAssertEqual(image.midY, visible.midY, accuracy: 1, "vertically centred")
+        c.session.close()
+    }
+
     /// Walk report: Tab from the sidebar moved to the note and also left a tab in it. A real Tab
     /// key event (not the probe's `key tab`, which calls insertTab on the text) must not edit.
     func testTabFromTheSidebarDoesNotEditTheNote() throws {
