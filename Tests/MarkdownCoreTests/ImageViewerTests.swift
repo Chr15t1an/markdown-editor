@@ -428,6 +428,16 @@ final class ImageViewingTests: XCTestCase {
               + "mag \(sv.magnification) image \(image) visible \(visible) "
               + "scrollers \(sv.scrollerStyle.rawValue) h \(sv.horizontalScroller?.isHidden ?? true) "
               + "v \(sv.verticalScroller?.isHidden ?? true)")
+        let constrained = clip.constrainBoundsRect(clip.bounds)
+        print("F1 probe2: clip class \(type(of: clip)) constrained \(constrained) isFitting \(v.isFitting)")
+        (clip as? CenteringClipView)?.recentre()
+        print("F1 probe3: after recentre bounds \(clip.bounds)")
+        v.fit()
+        print("F1 probe4: after fit bounds \(clip.bounds)")
+        clip.setBoundsOrigin(constrained.origin)
+        print("F1 probe5: after setBoundsOrigin bounds \(clip.bounds)")
+        c.window?.layoutIfNeeded()
+        print("F1 probe6: after layout bounds \(clip.bounds)")
         XCTAssertLessThan(sv.magnification, 0.2)
         XCTAssertEqual(image.midX, visible.midX, accuracy: 1, "horizontally centred")
         XCTAssertEqual(image.midY, visible.midY, accuracy: 1, "vertically centred")
