@@ -1,6 +1,12 @@
 import XCTest
 @testable import MarkdownCore
 
+/// A timing budget: as written on a developer Mac, 3× on CI (shared runners, where these went
+/// over by a few ms on about 1 run in 5). Locally a regression still fails at the strict budget.
+func timingBudget(_ seconds: TimeInterval) -> TimeInterval {
+    ProcessInfo.processInfo.environment["CI"] == nil ? seconds : seconds * 3
+}
+
 final class PerformanceTests: XCTestCase {
     static let sample: String = {
         let chunk = """
@@ -58,8 +64,8 @@ final class PerformanceTests: XCTestCase {
         }
         print("blocks-only 200KB best of 5: \(String(format: "%.2f", blocksOnly * 1000)) ms")
         print("parse 200KB best of 5: \(String(format: "%.2f", best * 1000)) ms")
-        XCTAssertLessThan(blocksOnly, 0.020)
-        XCTAssertLessThan(best, 0.060)
+        XCTAssertLessThan(blocksOnly, timingBudget(0.020))
+        XCTAssertLessThan(best, timingBudget(0.060))
     }
 
     func testParseMeasure() {
