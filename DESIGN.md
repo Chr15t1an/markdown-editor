@@ -443,8 +443,9 @@ of an open note is left to the text view.
 
 **Empty state** — centred `ui-empty-state` text in the editor pane: "Drop a folder here" at
 launch with nothing restored, "Select a file" when a folder is open and no file is, "“Name” was
-deleted or moved to the Trash" when the open file disappears, "“Name” can’t be displayed" when
-an image fails to decode. One sentence, no button; the action
+deleted or moved to the Trash" when the open file disappears, "“Name” is no longer in the folder"
+when the image on screen is deleted or renamed, "“Name” can’t be displayed" when an image fails
+to decode. One sentence, no button; the action
 is the drag or the sidebar.
 
 **Alerts** — `NSAlert` sheets only: open failure ("Couldn’t open “X”"), create failure
