@@ -429,6 +429,8 @@ final class ImageViewingTests: XCTestCase {
               + "scrollers \(sv.scrollerStyle.rawValue) h \(sv.horizontalScroller?.isHidden ?? true) "
               + "v \(sv.verticalScroller?.isHidden ?? true)")
         let constrained = clip.constrainBoundsRect(clip.bounds)
+        print("F1 probe1: clip insets \(clip.contentInsets) auto clip \(clip.automaticallyAdjustsContentInsets) "
+              + "auto scroll \(sv.automaticallyAdjustsContentInsets) clip.frame.width \(clip.frame.width)")
         print("F1 probe2: clip class \(type(of: clip)) constrained \(constrained) isFitting \(v.isFitting)")
         (clip as? CenteringClipView)?.recentre()
         print("F1 probe3: after recentre bounds \(clip.bounds)")
