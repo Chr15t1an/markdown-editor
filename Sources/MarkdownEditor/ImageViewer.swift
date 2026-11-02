@@ -228,16 +228,18 @@ final class CenteringClipView: NSClipView {
     override func constrainBoundsRect(_ proposedBounds: NSRect) -> NSRect {
         var rect = super.constrainBoundsRect(proposedBounds)
         guard let doc = documentView?.frame else { return rect }
-        let unit = frame.width > 0 ? rect.width / frame.width : 1   // document units per point
+        // The clip view's insets are already in document units (the scroll view's points times
+        // 1 / magnification), like `rect`: scaling them again hid the centring when zoomed out
+        // (walk F1: a fitted 8000 × 6000 photo sat flush with the bottom of the pane).
         let insets = contentInsets
-        let visibleWidth = rect.width - (insets.left + insets.right) * unit
-        let visibleHeight = rect.height - (insets.top + insets.bottom) * unit
+        let visibleWidth = rect.width - insets.left - insets.right
+        let visibleHeight = rect.height - insets.top - insets.bottom
         if visibleWidth > doc.width {
-            rect.origin.x = doc.minX - (visibleWidth - doc.width) / 2 - insets.left * unit
+            rect.origin.x = doc.minX - (visibleWidth - doc.width) / 2 - insets.left
         }
         if visibleHeight > doc.height {
             let lowInset = isFlipped ? insets.top : insets.bottom
-            rect.origin.y = doc.minY - (visibleHeight - doc.height) / 2 - lowInset * unit
+            rect.origin.y = doc.minY - (visibleHeight - doc.height) / 2 - lowInset
         }
         return rect
     }

@@ -204,9 +204,9 @@ final class TableIncrementalTests: XCTestCase {
         let top = median(at: loc(e.text, "person 0 ") + 8, "y")
         print("large table: \(String(format: "%.1f", keep * 1000)) ms per keystroke (grid kept), "
               + "\(String(format: "%.1f", widen * 1000)) ms (grid widened), \(String(format: "%.1f", top * 1000)) ms (first row)")
-        XCTAssertLessThan(keep, 0.050)
-        XCTAssertLessThan(widen, 0.050)
-        XCTAssertLessThan(top, 0.050)
+        XCTAssertLessThan(keep, timingBudget(0.050))
+        XCTAssertLessThan(widen, timingBudget(0.050))
+        XCTAssertLessThan(top, timingBudget(0.050))
 
         // Leaving the table brings the deferred grid in: every row lines up with the edited one.
         let start = Date()
