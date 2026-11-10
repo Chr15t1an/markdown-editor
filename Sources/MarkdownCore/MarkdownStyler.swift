@@ -20,6 +20,9 @@ extension NSAttributedString.Key {
     public static let mdPipeWidth = NSAttributedString.Key("md.pipeWidth")
     /// On a table's delimiter row (`|---|---|`), which collapses to a thin strip while hidden.
     public static let mdTableDelimiter = NSAttributedString.Key("md.tableDelimiter")
+    /// On each row of a wrapped table (`TableInfo.wrap`). Value: `NSNumber` — the height the
+    /// row's line takes while the table's source is hidden.
+    public static let mdTableRowHeight = NSAttributedString.Key("md.tableRowHeight")
 }
 
 /// When a marker is visible: `.span` markers show while the selection touches the span
@@ -92,8 +95,11 @@ public final class ImageInfo: NSObject, @unchecked Sendable {
 /// A table's grid geometry, from its cell widths and the column width available.
 public final class TableInfo: NSObject, @unchecked Sendable {
     public let alignments: [TableAlignment]
-    /// False when a row does not fit the column: the table then shows as source (pipes visible).
+    /// False when a row does not fit the column on one line: the table then wraps its cells
+    /// (`wrap`), or shows as source when even that cannot fit.
     public let fits: Bool
+    /// The wrapped layout, when the table does not fit but its cells can wrap to fit.
+    public let wrap: WrappedTable?
     /// The grid's right edge, from the start of each row's line (padding excluded).
     public let width: CGFloat
     /// Column starts then column widths: every row's pipe widths follow from these and the row.
@@ -105,15 +111,16 @@ public final class TableInfo: NSObject, @unchecked Sendable {
     public convenience init(alignments: [TableAlignment], fits: Bool, width: CGFloat) {
         self.init(alignments: alignments, fits: fits, width: width, grid: [])
     }
-    init(alignments: [TableAlignment], fits: Bool, width: CGFloat, grid: [CGFloat]) {
+    init(alignments: [TableAlignment], fits: Bool, width: CGFloat, grid: [CGFloat], wrap: WrappedTable? = nil) {
         self.alignments = alignments
         self.fits = fits
+        self.wrap = wrap
         self.width = width
         self.grid = grid
     }
     public override func isEqual(_ object: Any?) -> Bool {
         guard let o = object as? TableInfo else { return false }
-        return o.alignments == alignments && o.fits == fits && o.width == width && o.grid == grid
+        return o.alignments == alignments && o.fits == fits && o.width == width && o.grid == grid && o.wrap == wrap
     }
     public override var hash: Int { alignments.count &* 31 &+ Int(width) &+ (fits ? 1 : 0) }
 }
@@ -133,7 +140,7 @@ public struct MarkdownStyler: @unchecked Sendable {
     let tableRowCache = TableRowCache()
 
     private static let managedKeys: [NSAttributedString.Key] = [
-        .mdMarker, .mdHorizontalRule, .mdQuote, .mdCodeBlock, .mdLinkURL, .mdImage, .mdTable, .mdPipeWidth, .mdTableDelimiter,
+        .mdMarker, .mdHorizontalRule, .mdQuote, .mdCodeBlock, .mdLinkURL, .mdImage, .mdTable, .mdPipeWidth, .mdTableDelimiter, .mdTableRowHeight,
         .strikethroughStyle, .backgroundColor, .underlineStyle, .link, .kern,
     ]
 
@@ -255,11 +262,13 @@ public struct MarkdownStyler: @unchecked Sendable {
 
     /// Pipes and the delimiter row become `.line` markers (hidden while the caret is outside the
     /// table), and every separator pipe gets the width that lines its row up in columns. A table
-    /// whose rows cannot fit the column shows as source instead: pipes visible and dimmed.
+    /// whose rows cannot fit the column wraps its cells instead (`styleWrappedTable`), or shows
+    /// as source, pipes visible and dimmed, when the columns cannot be made narrow enough.
     private func styleTable(_ block: Block, _ table: TableLayout, _ alignments: [TableAlignment], in storage: NSTextStorage) {
         let (geometry, fits) = tableGeometry(table, alignments, storage)
-        storage.addAttribute(.mdTable, value: TableInfo(alignments: alignments, fits: fits, width: geometry.width,
-                                                        grid: geometry.grid), range: block.range)
+        let wrap = fits ? nil : wrappedTable(table, alignments, geometry, storage)
+        storage.addAttribute(.mdTable, value: TableInfo(alignments: alignments, fits: fits, width: wrap?.width ?? geometry.width,
+                                                        grid: geometry.grid, wrap: wrap), range: block.range)
         // Cells past the header's column count are not part of the grid.
         for row in table.body where row.cells.count > table.columns {
             for cell in row.cells[table.columns...] {
@@ -268,6 +277,7 @@ public struct MarkdownStyler: @unchecked Sendable {
         }
         guard fits else {
             for m in block.markerRanges { storage.addAttribute(.foregroundColor, value: theme.markerColor, range: m) }
+            if let wrap { styleWrappedTable(table, wrap, in: storage) }
             return
         }
         // Revealed with the header line: the same whole-table reveal as the block range (blocks
@@ -278,6 +288,32 @@ public struct MarkdownStyler: @unchecked Sendable {
         for (pipe, width) in geometry.pipeWidths {
             storage.addAttribute(.mdPipeWidth, value: NSNumber(value: Double(width)), range: NSRange(location: pipe, length: 1))
         }
+    }
+
+    /// A wrapped table hides all of its source while the caret is outside (every character a
+    /// `.line` marker revealed with the header line, as a grid's pipes are); the layout manager
+    /// draws the cells. Inline markers keep their `.span` value, so the source looks as usual
+    /// once revealed, and their dimmed colour; cell text keeps its own colour for drawing.
+    private func styleWrappedTable(_ table: TableLayout, _ wrap: WrappedTable, in storage: NSTextStorage) {
+        let reveal = MarkerReveal(.line, table.header.line, at: table.header.line.location)
+        for row in table.rows where row.line.length > 0 {
+            storage.enumerateAttribute(.mdMarker, in: row.line) { value, run, _ in
+                if let span = value as? MarkerReveal, span.scope == .span { return }
+                storage.addAttribute(.mdMarker, value: reveal, range: run)
+            }
+        }
+        if table.delimiter.line.length > 0 { storage.addAttribute(.mdTableDelimiter, value: true, range: table.delimiter.line) }
+        for (row, height) in zip([table.header] + table.body, wrap.rowHeights) where row.line.length > 0 {
+            storage.addAttribute(.mdTableRowHeight, value: NSNumber(value: Double(height)), range: row.line)
+        }
+    }
+
+    private func wrappedTable(_ table: TableLayout, _ alignments: [TableAlignment], _ geometry: TableGeometry,
+                              _ storage: NSTextStorage) -> WrappedTable? {
+        guard let available = tableWidth(), available > 0 else { return nil }
+        let natural = Array(geometry.grid.suffix(table.columns))
+        return WrappedTable.compute(table, alignments, natural: natural, storage: storage, available: available - 2,
+                                    theme: theme, cache: tableRowCache)
     }
 
     private func tableGeometry(_ table: TableLayout, _ alignments: [TableAlignment],
@@ -319,7 +355,9 @@ public struct MarkdownStyler: @unchecked Sendable {
                   NSEqualRanges(run, part), old == nil || old === info else { return false }
             old = info
         }
-        guard let old, old.alignments == alignments else { return false }
+        // A table that does not fit (wrapped, or shown as source) restyles whole: its wrapped
+        // column widths and row heights depend on every row.
+        guard let old, old.alignments == alignments, old.fits else { return false }
 
         // The row as styleBlock would style it.
         for key in Self.managedKeys { storage.removeAttribute(key, range: full) }
@@ -379,6 +417,13 @@ public struct MarkdownStyler: @unchecked Sendable {
                 continue
             }
             guard info.grid != geometry.grid || info.pendingAlign else { continue }
+            guard fits else {
+                // A table that does not fit is restyled whole by every edit; this only catches up.
+                storage.beginEditing()
+                styleBlock(block, in: storage, document: document)
+                storage.endEditing()
+                continue
+            }
             storage.beginEditing()
             storage.addAttribute(.mdTable, value: TableInfo(alignments: alignments, fits: fits, width: geometry.width,
                                                             grid: geometry.grid), range: block.range)

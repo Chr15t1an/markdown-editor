@@ -137,6 +137,17 @@ final class TableIncrementalTests: XCTestCase {
         assertMatchesFullRestyle(e, "grid back")
     }
 
+    func testTypingInAWrappedTableMatchesAFullRestyle() {
+        let e = editor(sample, width: 420)
+        let long = String(repeating: "wide ", count: 20)
+        type(e, long, at: loc(e.text, "Fast") + 4)
+        XCTAssertNotNil((e.textStorage.attribute(.mdTable, at: loc(e.text, "Model"), effectiveRange: nil) as? TableInfo)?.wrap)
+        type(e, "more words here ", at: loc(e.text, long))
+        type(e, "x", at: loc(e.text, "| c |") + 3)
+        leave(e)
+        assertMatchesFullRestyle(e, "wrapped")
+    }
+
     func testTableThatStopsFittingAndFitsAgain() {
         let e = editor(sample, width: 420)
         let long = String(repeating: "wide ", count: 20)

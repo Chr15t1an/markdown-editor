@@ -17,6 +17,8 @@ Images in an opened folder are listed in the sidebar and open in a read-only vie
   the arrow keys step through the folder. The subtitle shows its size in pixels.
 - Dropping an image, or Finder › Open With › Markdown Editor, opens its folder with it selected;
   Preview stays the default app for images.
+- Tables too wide for the column now wrap their cells to fit instead of showing as raw markdown.
+  Columns get room by how much text they hold; put the cursor in the table to edit its source.
 
 ## 0.4.0 — 2026-10-11
 

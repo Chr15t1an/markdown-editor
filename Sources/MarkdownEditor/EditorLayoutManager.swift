@@ -38,12 +38,16 @@ final class EditorLayoutManager: NSLayoutManager {
         }
         var tablesDrawn = Set<Int>()
         storage.enumerateAttribute(.mdTable, in: chars) { value, range, _ in
-            guard let info = value as? TableInfo, info.fits else { return }
+            guard let info = value as? TableInfo, info.fits || info.wrap != nil else { return }
             var table = NSRange()
             _ = storage.attribute(.mdTable, at: range.location, longestEffectiveRange: &table,
                                   in: NSRange(location: 0, length: storage.length))
             guard tablesDrawn.insert(table.location).inserted else { return }
-            drawTableRules(table, info, storage: storage, origin: origin, container: container)
+            if let wrap = info.wrap {
+                drawWrappedTable(table, info, wrap, visible: chars, storage: storage, origin: origin, container: container)
+            } else {
+                drawTableRules(table, info, storage: storage, origin: origin, container: container)
+            }
         }
         storage.enumerateAttribute(.mdImage, in: chars) { value, range, _ in
             // Drawn whether or not the caret has revealed the source: the space stays reserved.
@@ -88,6 +92,48 @@ final class EditorLayoutManager: NSLayoutManager {
         for (above, below) in zip(body, body.dropFirst()) {
             let bottom = textMetrics(above, storage).baseline, top = textMetrics(below, storage).capTop
             NSRect(x: x, y: origin.y + floor((bottom + top) / 2), width: width, height: theme.ruleWidth).fill()
+        }
+    }
+
+    /// A wrapped table while its source is hidden: each row's line is as tall as its wrapped
+    /// cells, and the cells are drawn here, with the same rules as a grid (a header rule through
+    /// the delimiter strip, hairlines between body rows). Only rows in `visible` are drawn.
+    private func drawWrappedTable(_ table: NSRange, _ info: TableInfo, _ wrap: WrappedTable, visible: NSRange,
+                                  storage: NSTextStorage, origin: NSPoint, container: NSTextContainer) {
+        guard markersHidden(at: table.location, in: storage) else { return }
+        let rows = BlockScanner.tableRows(storage.string as NSString, in: table)
+        guard rows.count >= 2 else { return }
+        let ns = storage.string as NSString
+        func fragment(_ row: TableRow) -> NSRect {
+            lineFragmentRect(forGlyphAt: glyphIndexForCharacter(at: row.line.location), effectiveRange: nil)
+        }
+        func shown(_ row: TableRow) -> Bool {
+            NSIntersectionRange(ns.lineRange(for: row.line), visible).length > 0
+        }
+        let left = origin.x + container.lineFragmentPadding
+        let width = min(wrap.width, container.size.width - 2 * container.lineFragmentPadding)
+        let padding = theme.tableWrappedRowPadding
+        let columns = wrap.columnWidths.count
+        for (i, row) in rows.enumerated() where i != 1 && shown(row) {
+            let frag = fragment(row)
+            for (c, cell) in row.cells.prefix(columns).enumerated() where cell.length > 0 {
+                let alignment = c < info.alignments.count ? info.alignments[c] : .none
+                let string = WrappedTable.cellString(cell, storage, alignment: alignment)
+                let rect = NSRect(x: left + frag.minX + wrap.columnStarts[c], y: origin.y + frag.minY + padding,
+                                  width: wrap.columnWidths[c], height: max(0, frag.height - 2 * padding))
+                string.draw(with: rect, options: WrappedTable.drawingOptions)
+            }
+        }
+        if shown(rows[1]) {
+            let delimiter = fragment(rows[1])
+            theme.tableHeaderRuleColor.setFill()
+            NSRect(x: left + delimiter.minX, y: origin.y + floor(delimiter.midY), width: width, height: theme.ruleWidth).fill()
+        }
+        theme.tableRowRuleColor.setFill()
+        let body = Array(rows.dropFirst(2))
+        for (above, below) in zip(body, body.dropFirst()) where shown(above) || shown(below) {
+            let frag = fragment(above)
+            NSRect(x: left + frag.minX, y: origin.y + floor(frag.maxY), width: width, height: theme.ruleWidth).fill()
         }
     }
 

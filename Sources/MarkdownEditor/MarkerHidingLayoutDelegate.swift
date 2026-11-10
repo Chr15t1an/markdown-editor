@@ -72,7 +72,8 @@ final class MarkerHidingLayoutDelegate: NSObject, NSLayoutManagerDelegate {
 
     /// A table's delimiter row (`|---|---|`) collapses to a thin strip while hidden, instead of a
     /// blank line between the header and the body. Only that row: an empty body row (`||`) is all
-    /// hidden markers too, but keeps its height.
+    /// hidden markers too, but keeps its height. A wrapped table's rows take the height of their
+    /// wrapped cells (`.mdTableRowHeight`), which the layout manager draws into.
     func layoutManager(_ layoutManager: NSLayoutManager,
                        shouldSetLineFragmentRect lineFragmentRect: UnsafeMutablePointer<NSRect>,
                        lineFragmentUsedRect: UnsafeMutablePointer<NSRect>,
@@ -81,8 +82,17 @@ final class MarkerHidingLayoutDelegate: NSObject, NSLayoutManagerDelegate {
         guard let storage = layoutManager.textStorage else { return false }
         let chars = layoutManager.characterRange(forGlyphRange: glyphRange, actualGlyphRange: nil)
         guard chars.length > 0, chars.location < storage.length,
-              storage.attribute(.mdTableDelimiter, at: chars.location, effectiveRange: nil) != nil,
               let reveal = storage.attribute(.mdMarker, at: chars.location, effectiveRange: nil) as? MarkerReveal,
+              reveal.scope == .line else { return false }
+        if let row = storage.attribute(.mdTableRowHeight, at: chars.location, effectiveRange: nil) as? NSNumber {
+            guard isHidden(reveal, at: chars.location) else { return false }
+            let h = CGFloat(row.doubleValue)
+            lineFragmentRect.pointee.size.height = h
+            lineFragmentUsedRect.pointee.size.height = h
+            baselineOffset.pointee = min(baselineOffset.pointee, h)
+            return true
+        }
+        guard storage.attribute(.mdTableDelimiter, at: chars.location, effectiveRange: nil) != nil,
               isHidden(reveal, at: chars.location) else { return false }
         let h = theme.tableDelimiterStripHeight
         lineFragmentRect.pointee.size.height = h

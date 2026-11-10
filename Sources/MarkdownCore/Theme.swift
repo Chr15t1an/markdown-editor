@@ -25,6 +25,11 @@ public struct Theme: @unchecked Sendable {
     public var tableGutter: CGFloat = 12
     /// Height a table's delimiter row keeps while hidden: a strip for the header rule.
     public var tableDelimiterStripHeight: CGFloat = 9
+    /// Space above and below a wrapped table row's cells (a table too wide for one line per row).
+    public var tableWrappedRowPadding: CGFloat = 4
+    /// Narrowest column a wrapped table may have; a table that cannot give every column this
+    /// much shows as source.
+    public var tableMinColumnWidth: CGFloat = 36
     /// Extra space reserved below an image-only paragraph (the image is drawn half of it down).
     public var imageGap: CGFloat = 8
     public var imageMaxHeight: CGFloat = 480

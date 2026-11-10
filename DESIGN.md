@@ -62,6 +62,8 @@ spacing:
   code-block-padding: 2               # Theme.codeBlockPadding — fill extends this far above and below the text
   table-gutter: 12                    # Theme.tableGutter — each side of a column boundary
   table-delimiter-strip-height: 9     # Theme.tableDelimiterStripHeight
+  table-wrapped-row-padding: 4        # Theme.tableWrappedRowPadding — above and below a wrapped row's cells
+  table-min-column-width: 36          # Theme.tableMinColumnWidth — narrower than this per column: source
   image-gap: 8                        # Theme.imageGap — the image is drawn half of it below its line
   image-max-height: 480               # Theme.imageMaxHeight
   sidebar-icon-size: 16               # Theme.sidebarIconSize
@@ -241,7 +243,7 @@ font, never a different face. Table header cells are bold.
 Line length is governed by the 760pt readable column (see Layout): at 15pt SF that is roughly
 85–95 characters at the widest, which is above the ~75 comfortable ceiling and is the known
 cost of a one-column editor that also has to show wide tables; a table wider than the column
-falls back to source rather than scrolling.
+wraps its cells rather than scrolling.
 
 UI chrome stays at system text styles: sidebar rows at the label default (Body, 13pt), the window
 title and subtitle at the system's. The empty-state label is the Title 2 text style
@@ -258,7 +260,7 @@ its proxy icon and the file name as subtitle.
 The editor is a single column of text, `readable-width` 760pt, centred when the pane is wider
 than that, with a minimum 28pt inset on each side and 24pt at the top. The column width drives
 everything that has to fit: images scale to it (max height 480, 8pt gap below), and a table whose
-rows cannot fit it shows as source instead of overflowing.
+rows cannot fit it on one line each wraps its cells instead of overflowing.
 
 Spacing inside the document is set by the markdown, not by a grid: paragraphs are separated by
 their own blank lines (the source is the layout), headings add 10 / 6pt before, lists indent 20pt
@@ -403,8 +405,12 @@ fence lines are hidden line markers. Revealed when the caret is inside.
 **Table** — GitHub pipe tables laid out as a grid: bold header, a header rule (divider at ×2
 alpha), hairlines between body rows (×0.8 alpha), 12pt gutters, column alignment from the
 delimiter row. Caret inside: the source is shown with dimmed pipes; caret leaves: the grid comes
-back. Too wide for the column: stays as source with pipes in `text-tertiary` — that is the
-"doesn't fit" state, and it is also a visible layout change, not just a colour.
+back. Too wide for the column on one line per row: the cells wrap. Each column gets at least its
+longest word and the rest of the room goes to the columns that need it most (browser automatic
+table layout); each row is as tall as its tallest cell plus 4pt above and below, with the same
+header rule and row hairlines. Only when the columns cannot each get 36pt does the table stay
+as source with pipes in `text-tertiary` — the "doesn't fit" state, also a visible layout
+change, not just a colour.
 
 **Image** — an image-only paragraph draws the file below its line, scaled to the column (max
 480pt high), source hidden; a missing or remote image shows the source text in

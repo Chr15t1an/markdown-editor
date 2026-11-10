@@ -163,18 +163,89 @@ final class TableEditorTests: XCTestCase {
         XCTAssertEqual(x(e, loc(text, "Name")), x(e, loc(text, "Ann")), accuracy: 0.5)
     }
 
-    func testOverWideTableFallsBackToSource() {
-        let text = "| Model | Job |\n|---|---|\n| Opus | Plans and reviews every single change before it ships |\n\nend\n"
+    func testOverWideTableWrapsItsCells() {
+        let long = "Plans and reviews every single change before it ships, then checks it again"
+        let text = "| Model | Job |\n|---|---|\n| Opus | \(long) |\n| Sonnet | Executes |\n\nend\n"
         let e = editor(text, width: 260)
         e.textView.setSelectedRange(NSRange(location: loc(text, "end"), length: 0))
         let info = e.textStorage.attribute(.mdTable, at: 0, effectiveRange: nil) as? TableInfo
         XCTAssertEqual(info?.fits, false)
+        let wrap = try! XCTUnwrap(info?.wrap)
+        // The columns fit the container; the short column keeps its natural width.
+        XCTAssertTrue(wrap.width <= 260 - 2 * e.textContainer.lineFragmentPadding)
+        XCTAssertEqual(wrap.columnWidths.count, 2)
+        XCTAssertGreaterThan(wrap.columnWidths[1], wrap.columnWidths[0])
+        // The whole source is hidden; the drawn cells live in rows as tall as their wrapped text.
+        for needle in ["|", "Model", "|---", "Opus", "Plans", "Sonnet"] { XCTAssertTrue(hidden(e, loc(text, needle)), needle) }
+        let lm = e.layoutManager
+        func height(_ needle: String) -> CGFloat {
+            lm.lineFragmentRect(forGlyphAt: lm.glyphIndexForCharacter(at: loc(text, needle)), effectiveRange: nil).height
+        }
+        XCTAssertGreaterThan(height("Opus"), 2 * height("Sonnet"))   // the long cell wraps to 3+ lines
+        XCTAssertEqual(height("|---"), e.styler.theme.tableDelimiterStripHeight)
+        XCTAssertEqual(height("Opus"), wrap.rowHeights[1])
+        // Caret inside: the source comes back, wrapping at the container like any paragraph.
+        e.textView.setSelectedRange(NSRange(location: loc(text, "Sonnet"), length: 0))
+        XCTAssertFalse(hidden(e, 0))
+        XCTAssertFalse(hidden(e, loc(text, "Opus")))
+        XCTAssertLessThan(height("Sonnet"), wrap.rowHeights[2] + 1)
+    }
+
+    func testWrappedCellDropsInlineMarkersAndKeepsAlignment() {
+        let text = "| a | b |\n|---|--:|\n| [link](https://example.com/a/very/long/path) | **bold** text that goes on and on and on |\n\nend\n"
+        let e = editor(text, width: 260)
+        e.textView.setSelectedRange(NSRange(location: loc(text, "end"), length: 0))
+        let body = BlockScanner.tableRows(e.textStorage.string as NSString,
+                                          in: NSRange(location: 0, length: loc(text, "\n\nend") + 1))[2]
+        XCTAssertEqual(WrappedTable.cellString(body.cells[0], e.textStorage, alignment: .none).string, "link")
+        let b = WrappedTable.cellString(body.cells[1], e.textStorage, alignment: .right)
+        XCTAssertEqual(b.string, "bold text that goes on and on and on")
+        XCTAssertEqual((b.attribute(.paragraphStyle, at: 0, effectiveRange: nil) as? NSParagraphStyle)?.alignment, .right)
+    }
+
+    func testTableTooNarrowEvenToWrapFallsBackToSource() {
+        let header = (1...10).map { "Column\($0)" }.joined(separator: " | ")
+        let text = "| \(header) |\n|\(String(repeating: "---|", count: 10))\n| \((1...10).map(String.init).joined(separator: " | ")) |\n\nend\n"
+        let e = editor(text, width: 260)
+        e.textView.setSelectedRange(NSRange(location: loc(text, "end"), length: 0))
+        let info = e.textStorage.attribute(.mdTable, at: 0, effectiveRange: nil) as? TableInfo
+        XCTAssertEqual(info?.fits, false)
+        XCTAssertNil(info?.wrap)
         XCTAssertFalse(hidden(e, 0))                      // pipes visible with the caret outside
         XCTAssertFalse(hidden(e, loc(text, "|---")))
-        // The same table fits a normal column.
-        e.textContainer.size = NSSize(width: 760, height: CGFloat.greatestFiniteMagnitude)
+        // The same table fits a wide column as a grid.
+        e.textContainer.size = NSSize(width: 1400, height: CGFloat.greatestFiniteMagnitude)
         e.restyleAll()
         XCTAssertTrue(hidden(e, 0))
+        XCTAssertNil((e.textStorage.attribute(.mdTable, at: 0, effectiveRange: nil) as? TableInfo)?.wrap)
+    }
+
+    /// The shape that prompted wrapping: a research list with a sentence-long column and links,
+    /// every row 1.4–2× the reading column.
+    func testResearchListTablesWrapInTheReadingColumn() {
+        let what = "Runs seasonal door-to-door teams recruited from campus career centers each spring; volume varies by region."
+        var text = "# List\n\n"
+        for t in 1...4 {
+            text += "## Group \(t)\n\n| Company | Reps | What they do | Source |\n|---|---|---|---|\n"
+            for r in 1...(3 * t) {
+                text += "| Company Number \(r) | \(r * 100)+ reps (2024, self-reported) | \(what) | [link](https://example.com/jobs/\(r)/a-long-path-to-a-posting) |\n"
+            }
+            text += "\n"
+        }
+        let e = editor(text, width: 760)
+        e.textView.setSelectedRange(NSRange(location: 0, length: 0))
+        let tables = e.document.blocks.filter { $0.table != nil }
+        XCTAssertEqual(tables.count, 4)
+        for block in tables {
+            let info = e.textStorage.attribute(.mdTable, at: block.range.location, effectiveRange: nil) as? TableInfo
+            XCTAssertEqual(info?.fits, false)
+            let wrap = info?.wrap
+            XCTAssertNotNil(wrap)
+            XCTAssertTrue(wrap?.width ?? .infinity <= 760)
+            // The sentence column gets the most room; the one-word link column stays narrow.
+            if let w = wrap?.columnWidths { XCTAssertEqual(w.max(), w[2]); XCTAssertEqual(w.min(), w[3]) }
+            XCTAssertTrue(hidden(e, block.range.location))
+        }
     }
 
     func testStorageRoundTripsThroughCaretMovesAndEditUndo() {

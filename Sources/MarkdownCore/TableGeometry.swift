@@ -185,13 +185,42 @@ final class TableRowCache: @unchecked Sendable {
 
     /// Theme sizes the widths were measured with; a change empties the cache.
     var fonts: [CGFloat] = [] {
-        didSet { if fonts != oldValue { current.removeAll(); previous.removeAll() } }
+        didSet {
+            if fonts != oldValue { current.removeAll(); previous.removeAll(); wordWidths.removeAll(); heights.removeAll() }
+        }
     }
     private var current: [Key: Widths] = [:]
     private var previous: [Key: Widths] = [:]
     private let generationSize: Int
 
     init(generationSize: Int = 20_000) { self.generationSize = generationSize }
+
+    // Wrapped tables (`WrappedTable`): per row, its cells' longest words, and its height at a
+    // set of column widths. Emptied whole when full; only tables too wide for the column use them.
+    private struct HeightKey: Hashable {
+        var row: Key
+        var widths: [CGFloat]
+    }
+    private var wordWidths: [Key: [CGFloat]] = [:]
+    private var heights: [HeightKey: CGFloat] = [:]
+
+    func words(_ text: NSString, header: Bool, measure: () -> [CGFloat]) -> [CGFloat] {
+        let key = Key(text: text, header: header)
+        if let hit = wordWidths[key] { return hit }
+        if wordWidths.count >= generationSize { wordWidths.removeAll(keepingCapacity: true) }
+        let value = measure()
+        wordWidths[key] = value
+        return value
+    }
+
+    func height(_ text: NSString, header: Bool, widths: [CGFloat], measure: () -> CGFloat) -> CGFloat {
+        let key = HeightKey(row: Key(text: text, header: header), widths: widths)
+        if let hit = heights[key] { return hit }
+        if heights.count >= generationSize { heights.removeAll(keepingCapacity: true) }
+        let value = measure()
+        heights[key] = value
+        return value
+    }
 
     func widths(_ text: NSString, header: Bool, measure: () -> Widths) -> Widths {
         let key = Key(text: text, header: header)
