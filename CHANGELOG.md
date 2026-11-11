@@ -8,9 +8,9 @@ uses the section verbatim as the GitHub Release notes, and the release-note post
 Heading format: `## X.Y.Z — YYYY-MM-DD` (the version must match `scripts/check-version.sh`).
 `## Unreleased` collects changes until the next release, when it is renamed to `## X.Y.Z — YYYY-MM-DD`.
 
-## Unreleased
+## 0.5.0 — 2026-11-11
 
-Images in an opened folder are listed in the sidebar and open in a read-only viewer.
+Images in an opened folder open in a read-only viewer, and tables too wide for the column wrap their cells.
 
 - PNG, JPEG, GIF, HEIC/HEIF, WebP, TIFF, BMP and AVIF files appear beside the notes with a photo icon.
 - Selecting one shows it fitted to the window (never enlarged), with pinch to zoom; GIFs animate and
