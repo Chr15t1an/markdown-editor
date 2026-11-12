@@ -1,8 +1,8 @@
 #!/usr/bin/env bash
 #
-# Verifiable outcome for image viewing in the sidebar: wait for the `Test` workflow run on the
-# worktree's HEAD sha (public GitHub API) and pass only when that run concluded `success` and the
-# image tests exist in HEAD's tree.
+# Verifiable outcome for task-list checkboxes: wait for the `Test` workflow run on the worktree's
+# HEAD sha (public GitHub API) and pass only when that run concluded `success` and the task-list
+# tests exist in HEAD's tree.
 #
 #   scripts/verify-outcome.sh <worktree>
 #
@@ -11,7 +11,7 @@
 #      OUTCOME_POLL     seconds between API polls (default 20)
 #      OUTCOME_MISSING_WAIT  give up early when no run has appeared for this long (default 300)
 #      GH_TOKEN / GITHUB_TOKEN  sent as a bearer token when set (off-proxy rate limit); optional
-#      OUTCOME_SKIP_TEST_NAMES=1  check CI only (phases before the image tests exist)
+#      OUTCOME_SKIP_TEST_NAMES=1  check CI only (phases before the task tests exist)
 #      OUTCOME_REPO     owner/repo (default Chr15t1an/markdown-editor)
 #      OUTCOME_SHA      check this sha instead of HEAD (testing the script itself)
 # Exit: 0 PASS, 1 FAIL (run failed, or a named test is missing), 2 NOT RUN (no run, still running
@@ -26,11 +26,17 @@ MISSING_WAIT="${OUTCOME_MISSING_WAIT:-300}"
 WORKFLOW_NAME="Test"
 WORKFLOW_PATH=".github/workflows/test.yml"
 TESTS=(
-  testListsImagesBesideMarkdown
-  testResolveImageOpensItsFolder
-  testRestorableFileAcceptsAnImage
-  testRelaunchRestoresAnImage
-  testThumbnailIsOrientedAndDownsampled
+  testTaskItemGetsCheckboxAndHiddenMarker
+  testCheckedTaskTextIsDimmed
+  testTaskMarkerHiddenUnlessCaretOnLine
+  testTaskContentDoesNotShiftWhenMarkerReveals
+  testTaskBoxDrawnOnlyWhileMarkerHidden
+  testToggleTaskRewritesOnlyTheBox
+  testClickOnTaskBoxTogglesWithOneUndo
+  testClickOutsideTaskBoxOrWithModifierDoesNotToggle
+  testToggleTaskMenuActionTogglesCaretLine
+  testReturnAndTabOnTaskItemsStillWork
+  testToggleTaskMarksDirtyAndSaves
 )
 
 if ! sha="${OUTCOME_SHA:-$(git -C "$WT" rev-parse HEAD 2>/dev/null)}" || [[ -z "$sha" ]]; then

@@ -8,6 +8,15 @@ uses the section verbatim as the GitHub Release notes, and the release-note post
 Heading format: `## X.Y.Z — YYYY-MM-DD` (the version must match `scripts/check-version.sh`).
 `## Unreleased` collects changes until the next release, when it is renamed to `## X.Y.Z — YYYY-MM-DD`.
 
+## Unreleased
+
+Task lists show checkboxes you can tick.
+
+- `- [ ]` and `- [x]` items draw a checkbox in place of the markdown; click it to tick or untick,
+  and the file saves `[x]` or `[ ]`. ⌘Z undoes it, and Format › Toggle Task (⇧⌘U) does the same
+  from the keyboard. Checked items dim their text.
+- Put the cursor on a task line to see and edit its `- [ ]` source; nothing moves when it appears.
+
 ## 0.5.0 — 2026-11-11
 
 Images in an opened folder open in a read-only viewer, and tables too wide for the column wrap their cells.
