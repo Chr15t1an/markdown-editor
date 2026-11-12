@@ -103,6 +103,7 @@ enum MainMenu {
         menu.addItem(item("Code", #selector(MarkdownFormatActions.toggleInlineCode(_:)), "`", [.command, .shift]))
         menu.addItem(item("Strikethrough", #selector(MarkdownFormatActions.toggleStrikethrough(_:)), "x", [.command, .shift]))
         menu.addItem(item("Link", #selector(MarkdownFormatActions.insertLink(_:)), "k"))
+        menu.addItem(item("Toggle Task", #selector(MarkdownFormatActions.toggleTask(_:)), "u", [.command, .shift]))
         menu.addItem(.separator())
         for level in 1...6 {
             let heading = item("Heading \(level)", #selector(MarkdownFormatActions.setHeadingLevel(_:)), "\(level)")

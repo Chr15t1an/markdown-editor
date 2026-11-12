@@ -8,6 +8,8 @@ import MarkdownCore
     func toggleInlineCode(_ sender: Any?)
     func toggleStrikethrough(_ sender: Any?)
     func insertLink(_ sender: Any?)
+    /// Ticks or unticks the task item on the caret's line.
+    func toggleTask(_ sender: Any?)
     /// Heading level from the sender's tag (0 = paragraph).
     func setHeadingLevel(_ sender: Any?)
 }
@@ -69,6 +71,14 @@ final class MarkdownTextView: NSTextView, MarkdownFormatActions {
     @objc func toggleStrikethrough(_ sender: Any?) { wrap("~~") }
     @objc func insertLink(_ sender: Any?) { apply(EditCommands.makeLink(string, selectedRange())) }
 
+    @objc func toggleTask(_ sender: Any?) {
+        if let edit = EditCommands.toggleTask(string, at: selectedRange().location, selection: selectedRange()) {
+            apply(edit)
+        } else {
+            NSSound.beep()
+        }
+    }
+
     @objc func setHeadingLevel(_ sender: Any?) {
         let level = (sender as? NSMenuItem)?.tag ?? (sender as? NSNumber)?.intValue ?? 0
         apply(EditCommands.setHeading(string, selectedRange(), level: level))
@@ -76,14 +86,40 @@ final class MarkdownTextView: NSTextView, MarkdownFormatActions {
 
     private func wrap(_ marker: String) { apply(EditCommands.toggleWrap(string, selectedRange(), marker: marker)) }
 
-    // MARK: ⌘-click opens links
+    // MARK: Clicks: task boxes toggle, ⌘-click opens links
 
     override func mouseDown(with event: NSEvent) {
+        if handleTaskClick(at: convert(event.locationInWindow, from: nil), clickCount: event.clickCount,
+                           modifiers: event.modifierFlags) { return }
         if event.modifierFlags.contains(.command), let url = linkURL(at: event) {
             NSWorkspace.shared.open(url)
             return
         }
         super.mouseDown(with: event)
+    }
+
+    /// A plain click on a task's checkbox slot (box drawn or source shown) toggles it and is
+    /// swallowed: no caret move. Double and triple clicks there are swallowed without toggling
+    /// again. With a modifier (⌘ ⇧ ⌥ ⌃) the click is the text view's. Returns whether it was handled.
+    func handleTaskClick(at viewPoint: NSPoint, clickCount: Int, modifiers: NSEvent.ModifierFlags) -> Bool {
+        guard modifiers.intersection([.command, .shift, .option, .control]).isEmpty,
+              let storage = textStorage, storage.length > 0,
+              let layout = layoutManager as? EditorLayoutManager, let container = textContainer else { return false }
+        let origin = textContainerOrigin
+        let point = NSPoint(x: viewPoint.x - origin.x, y: viewPoint.y - origin.y)
+        let index = layout.characterIndex(for: point, in: container, fractionOfDistanceBetweenInsertionPoints: nil)
+        guard index < storage.length else { return false }
+        let line = (string as NSString).lineRange(for: NSRange(location: index, length: 0))
+        var slotLocation: Int?
+        storage.enumerateAttribute(.mdTaskBox, in: line) { value, range, stop in
+            if value is TaskBox { slotLocation = range.location; stop.pointee = true }
+        }
+        guard let slotLocation, let slot = layout.taskBoxSlot(forTaskAt: slotLocation),
+              slot.slot.contains(point) else { return false }
+        if clickCount == 1, let edit = EditCommands.toggleTask(string, at: slotLocation, selection: selectedRange()) {
+            apply(edit)
+        }
+        return true
     }
 
     private func linkURL(at event: NSEvent) -> URL? {

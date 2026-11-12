@@ -9,6 +9,23 @@ final class EditCommandsTests: XCTestCase {
         return (edit.applied(to: text), edit.newSelection)
     }
 
+    func testToggleTaskRewritesOnlyTheBox() {
+        let cases: [(String, Int, String)] = [
+            ("- [ ] a", 6, "- [x] a"), ("- [x] a", 6, "- [ ] a"), ("- [X] a", 0, "- [ ] a"),
+            ("  * [ ] a", 8, "  * [x] a"), ("x\n- [ ]", 7, "x\n- [x]"),
+        ]
+        for (text, at, expected) in cases {
+            let sel = r(at, 0)
+            guard let edit = EditCommands.toggleTask(text, at: at, selection: sel) else { XCTFail(text); continue }
+            XCTAssertEqual(edit.applied(to: text), expected, text)
+            XCTAssertEqual(edit.replacementRange.length, 1, text)
+            XCTAssertEqual(edit.newSelection, sel, text)
+        }
+        for text in ["- a", "1. [ ] a", "plain"] {
+            XCTAssertNil(EditCommands.toggleTask(text, at: 1, selection: r(1, 0)), text)
+        }
+    }
+
     func testBoldWrapAndUnwrap() {
         let (t1, s1) = apply("a word b", EditCommands.toggleWrap("a word b", r(2, 4), marker: "**"))!
         XCTAssertEqual(t1, "a **word** b")
