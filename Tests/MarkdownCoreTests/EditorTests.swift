@@ -73,6 +73,83 @@ final class HidingTests: XCTestCase {
         XCTAssertTrue(isNull(e, 5))  // ">" hidden
     }
 
+    func testTaskMarkerHiddenUnlessCaretOnLine() {
+        let e = makeEditor("intro\n- [ ] a\n")
+        e.textView.setSelectedRange(NSRange(location: 0, length: 0))
+        for i in [6, 8, 10] { XCTAssertTrue(isNull(e, i), "hidden at \(i)") }
+        XCTAssertFalse(isNull(e, 12))   // "a"
+        e.textView.setSelectedRange(NSRange(location: 12, length: 0))
+        for i in [6, 8, 10] { XCTAssertFalse(isNull(e, i), "shown at \(i)") }
+    }
+
+    /// The hidden marker keeps its width, so the item text sits at the same x either way.
+    func testTaskContentDoesNotShiftWhenMarkerReveals() {
+        for (text, content) in [("intro\n- [ ] a\n", 12), ("intro\n- [x] a\n", 12), ("intro\n  - [ ] a\n", 14)] {
+            let e = makeEditor(text)
+            e.textView.setSelectedRange(NSRange(location: 0, length: 0))
+            XCTAssertTrue(isNull(e, content - 2), "\(text): ] hidden")
+            let hidden = x(e, content)
+            e.textView.setSelectedRange(NSRange(location: content, length: 0))
+            XCTAssertFalse(isNull(e, content - 2), "\(text): ] shown")
+            XCTAssertEqual(x(e, content), hidden, accuracy: 0.5, text)
+        }
+    }
+
+    func testTaskBoxDrawnOnlyWhileMarkerHidden() {
+        let e = makeEditor("x\n- [ ] a\n- [x] b\n")
+        let lm = e.layoutManager
+        var drawn: [(Bool, NSRect)] = []
+        lm.drawTaskBox = { checked, rect in drawn.append((checked, rect)) }
+        func draw() {
+            drawn = []
+            lm.ensureLayout(for: e.textContainer)
+            let image = NSImage(size: NSSize(width: 800, height: 600))
+            image.lockFocus()
+            lm.drawBackground(forGlyphRange: NSRange(location: 0, length: lm.numberOfGlyphs), at: .zero)
+            image.unlockFocus()
+        }
+        func contentX(_ char: Int) -> CGFloat {
+            let g = lm.glyphIndexForCharacter(at: char)
+            return lm.lineFragmentRect(forGlyphAt: g, effectiveRange: nil).minX + lm.location(forGlyphAt: g).x
+        }
+        e.textView.setSelectedRange(NSRange(location: 0, length: 0))
+        draw()
+        XCTAssertEqual(drawn.map(\.0), [false, true])
+        for ((_, rect), content) in zip(drawn, [8, 16]) {
+            XCTAssertEqual(rect.width, e.theme.taskBoxSize, accuracy: 0.01)
+            XCTAssertEqual(rect.height, e.theme.taskBoxSize, accuracy: 0.01)
+            XCTAssertTrue(rect.minX >= 0, "box starts at \(rect.minX)")
+            XCTAssertTrue(rect.maxX <= contentX(content), "box ends at \(rect.maxX), text at \(contentX(content))")
+        }
+        e.textView.setSelectedRange(NSRange(location: 8, length: 0))
+        draw()
+        XCTAssertEqual(drawn.map(\.0), [true])
+    }
+
+    /// Not a check: writes light and dark renders of a task list when MDE_SNAPSHOT_DIR is set
+    /// (MDE_SNAPSHOT_FILE: the markdown to render), for looking at the drawn boxes.
+    func testWriteTaskListSnapshotWhenAsked() throws {
+        let env = ProcessInfo.processInfo.environment
+        guard let dir = env["MDE_SNAPSHOT_DIR"], let file = env["MDE_SNAPSHOT_FILE"] else { return }
+        let text = try String(contentsOfFile: file, encoding: .utf8) + "\n- [x] checked sample\n"
+        let e = makeEditor(text)
+        e.textView.setSelectedRange(NSRange(location: (text as NSString).length, length: 0))
+        for (name, appearance) in [("light", NSAppearance.Name.aqua), ("dark", .darkAqua)] {
+            let view = e.textView!
+            view.appearance = NSAppearance(named: appearance)
+            e.view.layoutSubtreeIfNeeded()
+            if view.bounds.width == 0 { view.setFrameSize(NSSize(width: 800, height: 2000)) }
+            e.layoutManager.ensureLayout(for: e.textContainer)
+            let used = e.layoutManager.usedRect(for: e.textContainer)
+            let bounds = NSRect(x: 0, y: 0, width: view.bounds.width,
+                                height: min(view.bounds.height, used.maxY + 2 * view.textContainerInset.height))
+            guard let rep = view.bitmapImageRepForCachingDisplay(in: bounds) else { XCTFail("no bitmap"); return }
+            view.appearance!.performAsCurrentDrawingAppearance { view.cacheDisplay(in: bounds, to: rep) }
+            let png = rep.representation(using: .png, properties: [:])
+            try png?.write(to: URL(fileURLWithPath: dir).appendingPathComponent("taskbox-snapshot-\(name).png"))
+        }
+    }
+
     func testTypingClosesBold() {
         let e = makeEditor("")
         let tv = e.textView!

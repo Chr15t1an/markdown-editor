@@ -246,6 +246,38 @@ final class EditorViewController: NSViewController, NSTextViewDelegate, NSTextSt
                 image.draw(in: target, from: .zero, operation: .sourceOver, fraction: 1, respectFlipped: true, hints: nil)
             }
         }
+        layoutManager.drawTaskBox = { [weak self] checked, rect in
+            MainActor.assumeIsolated {
+                guard let theme = self?.theme else { return }
+                Self.drawTaskBox(checked: checked, in: rect, theme: theme)
+            }
+        }
+    }
+
+    /// A task-list checkbox: SF Symbol `square` or `checkmark.square.fill`, tinted one colour
+    /// (`listMarkerColor`). The template is drawn, then the colour filled `.sourceIn`, so the box
+    /// keeps the colour's own alpha and the checkmark stays a knockout.
+    static func drawTaskBox(checked: Bool, in rect: NSRect, theme: Theme) {
+        let name = checked ? "checkmark.square.fill" : "square"
+        guard let symbol = NSImage(systemSymbolName: name, accessibilityDescription: checked ? "checked" : "unchecked")?
+            .withSymbolConfiguration(NSImage.SymbolConfiguration(pointSize: theme.taskBoxSize, weight: .regular)) else { return }
+        let target = aspectFit(symbol.size, in: rect)
+        let color = theme.listMarkerColor
+        let tinted = NSImage(size: target.size, flipped: false) { bounds in
+            symbol.draw(in: bounds)
+            color.set()
+            bounds.fill(using: .sourceIn)
+            return true
+        }
+        tinted.draw(in: target, from: .zero, operation: .sourceOver, fraction: 1, respectFlipped: true, hints: nil)
+    }
+
+    /// `size` scaled to fit inside `rect`, centred.
+    private static func aspectFit(_ size: NSSize, in rect: NSRect) -> NSRect {
+        guard size.width > 0, size.height > 0 else { return rect }
+        let scale = min(rect.width / size.width, rect.height / size.height)
+        let w = size.width * scale, h = size.height * scale
+        return NSRect(x: rect.midX - w / 2, y: rect.midY - h / 2, width: w, height: h)
     }
 
     /// Restyles the whole document, keeping the selection (image loads, column width changes).

@@ -23,6 +23,12 @@ extension NSAttributedString.Key {
     /// On each row of a wrapped table (`TableInfo.wrap`). Value: `NSNumber` — the height the
     /// row's line takes while the table's source is hidden.
     public static let mdTableRowHeight = NSAttributedString.Key("md.tableRowHeight")
+    /// On a task item's bullet…`]` (`- [ ]`). Value: `TaskBox`. The layout manager draws a checkbox
+    /// there while the marker is hidden; a click in that slot toggles it.
+    public static let mdTaskBox = NSAttributedString.Key("md.taskBox")
+    /// On a hidden marker character that keeps its own width while hidden (task markers), so
+    /// revealing it does not move the text after it. Value: `NSNumber`.
+    public static let mdMarkerWidth = NSAttributedString.Key("md.markerWidth")
 }
 
 /// When a marker is visible: `.span` markers show while the selection touches the span
@@ -92,6 +98,21 @@ public final class ImageInfo: NSObject, @unchecked Sendable {
     public override var hash: Int { source.hashValue ^ lineRange.location }
 }
 
+/// A task item's checkbox: its state and the width of its slot (bullet through `]`).
+public final class TaskBox: NSObject, @unchecked Sendable {
+    public let checked: Bool
+    public let slotWidth: CGFloat
+    public init(checked: Bool, slotWidth: CGFloat) {
+        self.checked = checked
+        self.slotWidth = slotWidth
+    }
+    public override func isEqual(_ object: Any?) -> Bool {
+        guard let o = object as? TaskBox else { return false }
+        return o.checked == checked && o.slotWidth == slotWidth
+    }
+    public override var hash: Int { Int(slotWidth * 100) &* 31 &+ (checked ? 1 : 0) }
+}
+
 /// A table's grid geometry, from its cell widths and the column width available.
 public final class TableInfo: NSObject, @unchecked Sendable {
     public let alignments: [TableAlignment]
@@ -141,6 +162,7 @@ public struct MarkdownStyler: @unchecked Sendable {
 
     private static let managedKeys: [NSAttributedString.Key] = [
         .mdMarker, .mdHorizontalRule, .mdQuote, .mdCodeBlock, .mdLinkURL, .mdImage, .mdTable, .mdPipeWidth, .mdTableDelimiter, .mdTableRowHeight,
+        .mdTaskBox, .mdMarkerWidth,
         .strikethroughStyle, .backgroundColor, .underlineStyle, .link, .kern,
     ]
 
@@ -195,8 +217,10 @@ public struct MarkdownStyler: @unchecked Sendable {
             return (theme.headingFont(level: level),
                     theme.paragraphStyle(spacingBefore: theme.headingSpacing(level: level), lineHeightMultiple: theme.headingLineHeightMultiple),
                     theme.textColor)
-        case .bulletItem, .orderedItem, .taskItem:
+        case .bulletItem, .orderedItem:
             return (theme.bodyFont, theme.paragraphStyle(headIndent: markerWidth), theme.textColor)
+        case .taskItem(_, let checked):
+            return (theme.bodyFont, theme.paragraphStyle(headIndent: markerWidth), checked ? theme.taskDoneTextColor : theme.textColor)
         case .blockquote:
             return (theme.bodyFont, theme.paragraphStyle(headIndent: theme.quoteIndent, firstLineHeadIndent: theme.quoteIndent), theme.quoteColor)
         case .fencedCode:
@@ -229,8 +253,10 @@ public struct MarkdownStyler: @unchecked Sendable {
             storage.addAttribute(.mdHorizontalRule, value: true, range: r)
             for m in block.markerRanges { marker(m, .line, block.range, storage) }
         case .bulletItem, .orderedItem, .taskItem:
-            // List markers stay visible (dimmed): hiding them makes list editing fragile.
+            // Bullet and ordered markers stay visible (dimmed). A task's `- [ ]` hides behind a drawn
+            // box while the caret is off the line, keeping its width so nothing moves when it reveals.
             for m in block.markerRanges { storage.addAttribute(.foregroundColor, value: theme.listMarkerColor, range: m) }
+            if case .taskItem(_, let checked) = block.kind { styleTaskMarker(block, checked: checked, storage) }
         case .paragraph, .blank, .table:
             break
         }
@@ -453,6 +479,36 @@ public struct MarkdownStyler: @unchecked Sendable {
         var end = lo
         while end < all.count, all[end].location < range.location + range.length { end += 1 }
         return all[lo..<end]
+    }
+
+    /// A task item's bullet, `[`, box character and `]` become `.line` markers that keep their own
+    /// (unrounded) width while hidden, and the bullet…`]` slot carries the `TaskBox` the layout
+    /// manager draws. Spaces (indent, gaps, an unchecked box) lay out as spaces already.
+    private func styleTaskMarker(_ block: Block, checked: Bool, _ storage: NSTextStorage) {
+        guard let m = block.markerRanges.first else { return }
+        let ns = storage.string as NSString
+        let end = m.location + m.length
+        var bullet = m.location
+        while bullet < end, ns.character(at: bullet) == 0x20 || ns.character(at: bullet) == 0x09 { bullet += 1 }
+        var open = bullet + 1
+        while open < end, ns.character(at: open) != 0x5B { open += 1 }   // "["
+        let close = open + 2
+        guard close < end, ns.character(at: close) == 0x5D else { return }   // "]"
+        let slot = NSRange(location: bullet, length: close + 1 - bullet)
+        storage.addAttribute(.mdTaskBox, value: TaskBox(checked: checked, slotWidth: advance(of: slot, in: storage)), range: slot)
+        for i in [bullet, open, open + 1, close] where ns.character(at: i) != 0x20 {
+            let r = NSRange(location: i, length: 1)
+            marker(r, .line, block.range, storage)
+            storage.addAttribute(.mdMarkerWidth, value: NSNumber(value: Double(advance(of: r, in: storage))), range: r)
+            storage.addAttribute(.foregroundColor, value: theme.listMarkerColor, range: r)
+        }
+    }
+
+    /// The laid-out width of `range` in the body font, not rounded (a hidden marker must take
+    /// exactly the space its glyphs take when shown).
+    private func advance(of range: NSRange, in storage: NSTextStorage) -> CGFloat {
+        let text = (storage.string as NSString).substring(with: range)
+        return (text as NSString).size(withAttributes: [.font: theme.bodyFont]).width
     }
 
     private func width(of range: NSRange, in storage: NSTextStorage) -> CGFloat {

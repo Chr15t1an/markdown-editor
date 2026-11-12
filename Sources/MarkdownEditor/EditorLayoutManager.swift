@@ -2,11 +2,13 @@ import AppKit
 import MarkdownCore
 
 /// Draws block chrome that has no glyphs: horizontal rules, quote bars, code-block backgrounds,
-/// table rules.
+/// table rules, images and task-list checkboxes.
 final class EditorLayoutManager: NSLayoutManager {
     weak var hiding: MarkerHidingLayoutDelegate?
     /// Draws an image into the space reserved below an image-only paragraph.
     var drawImage: ((ImageInfo, NSRect) -> Void)?
+    /// Draws a task-list checkbox (checked or not) into a rect, while the task's marker is hidden.
+    var drawTaskBox: ((Bool, NSRect) -> Void)?
     /// Set by the editor from its styler's theme.
     var theme = Theme()
 
@@ -61,6 +63,34 @@ final class EditorLayoutManager: NSLayoutManager {
             let below = NSRect(x: x, y: origin.y + line.maxY + offset, width: width, height: frag.maxY - line.maxY - offset)
             drawImage?(info, below)
         }
+        var boxesDrawn = Set<Int>()
+        storage.enumerateAttribute(.mdTaskBox, in: chars) { value, range, _ in
+            guard value is TaskBox, let slot = taskBoxSlot(forTaskAt: range.location),
+                  boxesDrawn.insert(slot.start).inserted, markersHidden(at: slot.start, in: storage) else { return }
+            drawTaskBox?(slot.checked, slot.box.offsetBy(dx: origin.x, dy: origin.y))
+        }
+    }
+
+    /// The checkbox slot of the task item at `charIndex` (any character carrying `.mdTaskBox`), in
+    /// container coordinates: `slot` (bullet through `]`, the first line's height) is the click
+    /// target, `box` the `taskBoxSize` square drawn centred in it on the text's cap height.
+    func taskBoxSlot(forTaskAt charIndex: Int) -> (slot: NSRect, box: NSRect, checked: Bool, start: Int)? {
+        guard let storage = textStorage, charIndex < storage.length else { return nil }
+        let line = (storage.string as NSString).lineRange(for: NSRange(location: charIndex, length: 0))
+        var range = NSRange()
+        guard let info = storage.attribute(.mdTaskBox, at: charIndex, longestEffectiveRange: &range, in: line) as? TaskBox
+        else { return nil }
+        let g = glyphIndexForCharacter(at: range.location)
+        guard g < numberOfGlyphs else { return nil }
+        let frag = lineFragmentRect(forGlyphAt: g, effectiveRange: nil)
+        let used = lineFragmentUsedRect(forGlyphAt: g, effectiveRange: nil)
+        let loc = location(forGlyphAt: g)
+        let slot = NSRect(x: frag.minX + loc.x, y: frag.minY, width: info.slotWidth, height: used.height)
+        let font = storage.attribute(.font, at: range.location, effectiveRange: nil) as? NSFont ?? theme.bodyFont
+        let baseline = frag.minY + loc.y
+        let side = theme.taskBoxSize
+        let box = NSRect(x: slot.midX - side / 2, y: baseline - font.capHeight / 2 - side / 2, width: side, height: side)
+        return (slot, box, info.checked, range.location)
     }
 
     /// A table while its pipes are hidden: a rule through the (hidden) delimiter row under the

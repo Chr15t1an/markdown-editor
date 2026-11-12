@@ -33,6 +33,8 @@ public struct Theme: @unchecked Sendable {
     /// Extra space reserved below an image-only paragraph (the image is drawn half of it down).
     public var imageGap: CGFloat = 8
     public var imageMaxHeight: CGFloat = 480
+    /// Side of the task-list checkbox, drawn in place of `- [ ]`.
+    public var taskBoxSize: CGFloat = 14
 
     // MARK: Editor pane
 
@@ -74,6 +76,8 @@ public struct Theme: @unchecked Sendable {
     public var markerColor: NSColor = .tertiaryLabelColor
     public var listMarkerColor: NSColor = .secondaryLabelColor
     public var quoteColor: NSColor = .secondaryLabelColor
+    /// Text of a checked task item.
+    public var taskDoneTextColor: NSColor = .secondaryLabelColor
     public var linkColor: NSColor = .linkColor
     public var codeBackground: NSColor = .quaternarySystemFill
     public var dividerColor: NSColor = .separatorColor

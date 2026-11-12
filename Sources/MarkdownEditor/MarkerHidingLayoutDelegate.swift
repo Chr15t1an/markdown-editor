@@ -6,7 +6,9 @@ import MarkdownCore
 ///
 /// Hidden marker glyphs are generated as control characters laid out with zero advancement
 /// (WWDC18 session 221's approach) — except a table's pipes, which are laid out as whitespace of
-/// the width the styler computed (`.mdPipeWidth`), so the cells line up in columns. Plain `.null` glyphs were tried first: at the start of a
+/// the width the styler computed (`.mdPipeWidth`), so the cells line up in columns, and a task
+/// item's `- [ ]`, which keeps its own width (`.mdMarkerWidth`) so the text does not move when it
+/// reveals. Plain `.null` glyphs were tried first: at the start of a
 /// line they are attached to the previous line fragment, which puts the caret and block chrome
 /// on the wrong line.
 final class MarkerHidingLayoutDelegate: NSObject, NSLayoutManagerDelegate {
@@ -55,7 +57,8 @@ final class MarkerHidingLayoutDelegate: NSObject, NSLayoutManagerDelegate {
               isHidden(reveal, at: charIndex) else { return action }
         // A table's separator pipe keeps a width (its column padding); `.whitespace` is the only
         // action for which the typesetter asks boundingBoxForControlGlyphAt (research spike C).
-        if storage.attribute(.mdPipeWidth, at: charIndex, effectiveRange: nil) != nil { return .whitespace }
+        if storage.attribute(.mdPipeWidth, at: charIndex, effectiveRange: nil) != nil
+            || storage.attribute(.mdMarkerWidth, at: charIndex, effectiveRange: nil) != nil { return .whitespace }
         return .zeroAdvancement
     }
 
@@ -64,7 +67,8 @@ final class MarkerHidingLayoutDelegate: NSObject, NSLayoutManagerDelegate {
                        glyphPosition: NSPoint, characterIndex charIndex: Int) -> NSRect {
         var width: CGFloat = 0
         if let storage = layoutManager.textStorage, charIndex < storage.length,
-           let value = storage.attribute(.mdPipeWidth, at: charIndex, effectiveRange: nil) as? NSNumber {
+           let value = (storage.attribute(.mdPipeWidth, at: charIndex, effectiveRange: nil)
+                        ?? storage.attribute(.mdMarkerWidth, at: charIndex, effectiveRange: nil)) as? NSNumber {
             width = CGFloat(value.doubleValue)
         }
         return NSRect(x: glyphPosition.x, y: glyphPosition.y, width: width, height: proposedRect.height)

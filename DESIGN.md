@@ -16,7 +16,7 @@ colors:
   surface:             "NSSplitViewItem sidebar material"   # sidebar: vibrant source-list material over windowBackgroundColor
   text:                "NSColor.textColor"                  # Theme.textColor — document text
   text-ui:             "NSColor.labelColor"                 # sidebar rows, window title (NSTextField default)
-  text-secondary:      "NSColor.secondaryLabelColor"        # Theme.listMarkerColor, Theme.quoteColor, Theme.emptyStateColor
+  text-secondary:      "NSColor.secondaryLabelColor"        # Theme.listMarkerColor, Theme.quoteColor, Theme.taskDoneTextColor, Theme.emptyStateColor
   text-tertiary:       "NSColor.tertiaryLabelColor"         # Theme.markerColor — revealed markdown syntax
   link:                "NSColor.linkColor"                  # Theme.linkColor
   code-background:     "NSColor.quaternarySystemFill"       # Theme.codeBackground — inline code and code blocks
@@ -66,6 +66,7 @@ spacing:
   table-min-column-width: 36          # Theme.tableMinColumnWidth — narrower than this per column: source
   image-gap: 8                        # Theme.imageGap — the image is drawn half of it below its line
   image-max-height: 480               # Theme.imageMaxHeight
+  task-box-size: 14                   # Theme.taskBoxSize — task-list checkbox side
   sidebar-icon-size: 16               # Theme.sidebarIconSize
   sidebar-icon-gap: 6                 # Theme.sidebarIconGap
   sidebar-cell-inset: 2               # Theme.sidebarCellInset
@@ -105,6 +106,7 @@ components:
   link:          { textColor: "{link}" }
   marker:        { textColor: "{text-tertiary}" }
   list-marker:   { textColor: "{text-secondary}" }
+  task-box:      { color: "{text-secondary}", size: "{spacing.task-box-size}", icon: "SF Symbol square / checkmark.square.fill", checkedText: "{text-secondary}" }
   table:         { headerWeight: 700, headerRule: "{strokes.table-header-rule}", rowRule: "{strokes.table-row-rule}", gutter: "{spacing.table-gutter}" }
   drop-target:   { stroke: "{strokes.drop-highlight}" }
   empty-state:   { textColor: "{text-secondary}", font: "{typography.ui-empty-state}" }
