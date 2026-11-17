@@ -89,7 +89,7 @@ nothing else is sent. No tracking.
 
 Editing: ⌘B bold, ⌘I italic, ⌘⇧` code, ⌘⇧X strikethrough, ⌘K link, ⌘1–⌘6 heading, ⌘0 paragraph.
 Return continues a list, task list or quote (Return on an empty item ends it); Tab / ⇧Tab indent
-list items. ⌘-click a link to open it.
+list items. Click a task box (`- [ ]`) to tick it, or press ⇧⌘U on its line. ⌘-click a link to open it.
 
 Tables (GitHub-style `| a | b |` rows over a `|---|---|` line, `:--:` to center a column) show as
 aligned columns with a rule under the header; put the cursor anywhere in a table to edit its

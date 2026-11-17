@@ -102,6 +102,20 @@ public enum EditCommands {
         return TextEdit(oldPrefix, newPrefix, selection: NSRange(location: newStart, length: max(0, newEnd - newStart)))
     }
 
+    /// Ticks or unticks the task box on the line containing `location`: `[ ]` → `[x]`,
+    /// `[x]`/`[X]` → `[ ]`. Only the box character changes, so `selection` is kept. `nil` when
+    /// that line is not a task item.
+    public static func toggleTask(_ text: String, at location: Int, selection: NSRange) -> TextEdit? {
+        let doc = MarkdownDocument(text)
+        guard let index = doc.blockIndex(containing: location) else { return nil }
+        let block = doc.blocks[index]
+        guard case .taskItem(_, let checked) = block.kind, let marker = block.markerRanges.first else { return nil }
+        let ns = text as NSString
+        let open = ns.range(of: "[", options: [], range: marker)
+        guard open.location != NSNotFound else { return nil }
+        return TextEdit(NSRange(location: open.location + 1, length: 1), checked ? " " : "x", selection: selection)
+    }
+
     /// Return inside a list item, task or quote continues it; on an empty item it removes the
     /// marker (ends the list). Inside fenced code, and everywhere else, the default applies.
     public static func newline(_ text: String, _ sel: NSRange) -> TextEdit? {

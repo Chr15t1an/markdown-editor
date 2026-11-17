@@ -15,6 +15,68 @@ final class TextViewCommandTests: XCTestCase {
         XCTAssertEqual(e.text, "- a")
     }
 
+    private func boxCentre(_ e: EditorViewController, _ char: Int) -> NSPoint {
+        let slot = e.layoutManager.taskBoxSlot(forTaskAt: char)!.slot
+        let origin = e.textView.textContainerOrigin
+        return NSPoint(x: slot.midX + origin.x, y: slot.midY + origin.y)
+    }
+
+    func testClickOnTaskBoxTogglesWithOneUndo() {
+        let e = makeEditor("intro\n- [ ] a\n")
+        let tv = e.textView!
+        tv.setSelectedRange(NSRange(location: 0, length: 0))
+        XCTAssertTrue(tv.handleTaskClick(at: boxCentre(e, 6), clickCount: 1, modifiers: []))
+        XCTAssertEqual(e.text, "intro\n- [x] a\n")
+        XCTAssertEqual(tv.selectedRange(), NSRange(location: 0, length: 0))
+        tv.undoManager!.undo()
+        XCTAssertEqual(e.text, "intro\n- [ ] a\n")
+    }
+
+    func testClickOutsideTaskBoxOrWithModifierDoesNotToggle() {
+        let e = makeEditor("intro\n- [ ] a\n")
+        let tv = e.textView!
+        tv.setSelectedRange(NSRange(location: 0, length: 0))
+        let lm = e.layoutManager
+        let g = lm.glyphIndexForCharacter(at: 12)
+        let frag = lm.lineFragmentRect(forGlyphAt: g, effectiveRange: nil)
+        let origin = tv.textContainerOrigin
+        let overText = NSPoint(x: frag.minX + lm.location(forGlyphAt: g).x + 3 + origin.x, y: frag.midY + origin.y)
+        XCTAssertFalse(tv.handleTaskClick(at: overText, clickCount: 1, modifiers: []))
+        XCTAssertFalse(tv.handleTaskClick(at: boxCentre(e, 6), clickCount: 1, modifiers: .command))
+        XCTAssertFalse(tv.handleTaskClick(at: boxCentre(e, 6), clickCount: 1, modifiers: .option))
+        XCTAssertTrue(tv.handleTaskClick(at: boxCentre(e, 6), clickCount: 2, modifiers: []))
+        XCTAssertEqual(e.text, "intro\n- [ ] a\n")
+    }
+
+    func testToggleTaskMenuActionTogglesCaretLine() {
+        let e = makeEditor("intro\n- [ ] a\n")
+        let tv = e.textView!
+        tv.setSelectedRange(NSRange(location: 12, length: 0))
+        tv.toggleTask(nil)
+        XCTAssertEqual(e.text, "intro\n- [x] a\n")
+        tv.toggleTask(nil)
+        XCTAssertEqual(e.text, "intro\n- [ ] a\n")
+    }
+
+    /// Return and Tab work on the text, so hiding the task marker's glyphs must not change them.
+    func testReturnAndTabOnTaskItemsStillWork() {
+        for roundTrip in [false, true] {
+            let e = makeEditor("- [x] a")
+            let tv = e.textView!
+            tv.setSelectedRange(NSRange(location: 7, length: 0))
+            if roundTrip {
+                tv.setSelectedRange(NSRange(location: 0, length: 0))
+                tv.setSelectedRange(NSRange(location: 7, length: 0))
+            }
+            tv.insertNewline(nil)
+            XCTAssertEqual(e.text, "- [x] a\n- [ ] ")
+            tv.insertTab(nil)
+            XCTAssertEqual(e.text, "- [x] a\n  - [ ] ")
+            tv.insertBacktab(nil)
+            XCTAssertEqual(e.text, "- [x] a\n- [ ] ")
+        }
+    }
+
     func testTypingThenReturnUndoesSeparately() {
         let e = makeEditor("")
         let tv = e.textView!

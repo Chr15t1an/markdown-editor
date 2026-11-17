@@ -53,6 +53,16 @@ final class FileSessionTests: XCTestCase {
         XCTAssertEqual(try String(contentsOf: a, encoding: .utf8), "A\nmore")
     }
 
+    func testToggleTaskMarksDirtyAndSaves() throws {
+        let a = try file("a.md", "- [ ] a\n")
+        XCTAssertTrue(session.open(a))
+        editor.textView.setSelectedRange(NSRange(location: 6, length: 0))
+        editor.textView.toggleTask(nil)
+        XCTAssertTrue(session.isDirty)
+        XCTAssertTrue(session.save())
+        XCTAssertEqual(try String(contentsOf: a, encoding: .utf8), "- [x] a\n")
+    }
+
     func testFailedSaveKeepsBufferDirtyAndReports() throws {
         let a = try file("a.md", "A\n")
         XCTAssertTrue(session.open(a))

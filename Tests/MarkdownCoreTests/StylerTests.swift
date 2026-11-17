@@ -73,6 +73,50 @@ final class StylerTests: XCTestCase {
         XCTAssertEqual(reveal(s, 14)?.scope, .line)
     }
 
+    func testTaskItemGetsCheckboxAndHiddenMarker() {
+        let text = "- [ ] a\n- [x] b\n* [X] c\n  + [ ] d\n- [ ]\n"
+        let s = styled(text)
+        func box(_ at: Int) -> TaskBox? { s.attribute(.mdTaskBox, at: at, effectiveRange: nil) as? TaskBox }
+        func width(_ at: Int) -> Double? { (s.attribute(.mdMarkerWidth, at: at, effectiveRange: nil) as? NSNumber)?.doubleValue }
+        // (bullet, "[", box char, "]", content or nil, checked)
+        let items: [(Int, Int, Int, Int, Int?, Bool)] = [
+            (0, 2, 3, 4, 6, false), (8, 10, 11, 12, 14, true), (16, 18, 19, 20, 22, true),
+            (26, 28, 29, 30, 32, false), (34, 36, 37, 38, nil, false),
+        ]
+        for (bullet, open, char, close, content, checked) in items {
+            for i in bullet...close {
+                XCTAssertEqual(box(i)?.checked, checked, "box at \(i)")
+            }
+            for i in [bullet, open, close] + (checked ? [char] : []) {
+                XCTAssertEqual(reveal(s, i)?.scope, .line, "marker at \(i)")
+                XCTAssertGreaterThan(width(i) ?? 0, 0, "width at \(i)")
+            }
+            if !checked {
+                XCTAssertNil(reveal(s, char), "unchecked box space at \(char)")
+                XCTAssertNil(width(char))
+            }
+            if let content {
+                XCTAssertNil(box(content))
+                XCTAssertNil(reveal(s, content))
+                XCTAssertNil(width(content))
+            }
+        }
+        // The indent of a nested item is not a marker and not part of the slot.
+        XCTAssertNil(reveal(s, 24))
+        XCTAssertNil(reveal(s, 25))
+        XCTAssertNil(box(25))
+        // Widths are unrounded advances, so hiding does not shift the text.
+        let dash = ("-" as NSString).size(withAttributes: [.font: Theme().bodyFont]).width
+        XCTAssertEqual(width(0) ?? 0, Double(dash), accuracy: 0.001)
+    }
+
+    func testCheckedTaskTextIsDimmed() {
+        let s = styled("- [ ] a\n- [x] b\n")
+        let theme = Theme()
+        XCTAssertEqual(s.attribute(.foregroundColor, at: 14, effectiveRange: nil) as? NSColor, theme.taskDoneTextColor)
+        XCTAssertEqual(s.attribute(.foregroundColor, at: 6, effectiveRange: nil) as? NSColor, theme.textColor)
+    }
+
     func testRestyleRangeClearsOldAttributes() {
         let storage = NSTextStorage(string: "**b**")
         let styler = MarkdownStyler()

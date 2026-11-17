@@ -16,7 +16,7 @@ colors:
   surface:             "NSSplitViewItem sidebar material"   # sidebar: vibrant source-list material over windowBackgroundColor
   text:                "NSColor.textColor"                  # Theme.textColor — document text
   text-ui:             "NSColor.labelColor"                 # sidebar rows, window title (NSTextField default)
-  text-secondary:      "NSColor.secondaryLabelColor"        # Theme.listMarkerColor, Theme.quoteColor, Theme.emptyStateColor
+  text-secondary:      "NSColor.secondaryLabelColor"        # Theme.listMarkerColor, Theme.quoteColor, Theme.taskDoneTextColor, Theme.emptyStateColor
   text-tertiary:       "NSColor.tertiaryLabelColor"         # Theme.markerColor — revealed markdown syntax
   link:                "NSColor.linkColor"                  # Theme.linkColor
   code-background:     "NSColor.quaternarySystemFill"       # Theme.codeBackground — inline code and code blocks
@@ -66,6 +66,7 @@ spacing:
   table-min-column-width: 36          # Theme.tableMinColumnWidth — narrower than this per column: source
   image-gap: 8                        # Theme.imageGap — the image is drawn half of it below its line
   image-max-height: 480               # Theme.imageMaxHeight
+  task-box-size: 14                   # Theme.taskBoxSize — task-list checkbox side
   sidebar-icon-size: 16               # Theme.sidebarIconSize
   sidebar-icon-gap: 6                 # Theme.sidebarIconGap
   sidebar-cell-inset: 2               # Theme.sidebarCellInset
@@ -105,6 +106,7 @@ components:
   link:          { textColor: "{link}" }
   marker:        { textColor: "{text-tertiary}" }
   list-marker:   { textColor: "{text-secondary}" }
+  task-box:      { color: "{text-secondary}", size: "{spacing.task-box-size}", icon: "SF Symbol square / checkmark.square.fill", checkedText: "{text-secondary}" }
   table:         { headerWeight: 700, headerRule: "{strokes.table-header-rule}", rowRule: "{strokes.table-row-rule}", gutter: "{spacing.table-gutter}" }
   drop-target:   { stroke: "{strokes.drop-highlight}" }
   empty-state:   { textColor: "{text-secondary}", font: "{typography.ui-empty-state}" }
@@ -203,7 +205,7 @@ Contrast, checked with `contrast.py` against the values the semantic colours res
 | text-ui / sidebar (`#272727`, `#DDDDDD`) | 14.94:1 | 12.27:1 | ≥ 4.5 | pass |
 | text / code-background (`#F8F8F8`, `#242424`) | 19.77:1 | 15.52:1 | ≥ 4.5 | pass |
 | link / background (`#0068DA`, `#419CFF`) | 5.26:1 | 5.89:1 | ≥ 4.5 | pass |
-| text-secondary / background (`#808080`, `#9A9A9A`) | **3.95:1** | 5.92:1 | ≥ 4.5 | light fails AA for 15pt regular (quote text, list markers) |
+| text-secondary / background (`#808080`, `#9A9A9A`) | **3.95:1** | 5.92:1 | ≥ 4.5 | light fails AA for 15pt regular (quote text, list markers, task boxes, checked task text) |
 | text-tertiary / background (`#BDBDBD`, `#565656`) | **1.88:1** | **2.27:1** | ≥ 4.5 (≥ 3 if decorative) | fails — acceptable for revealed syntax only |
 | empty-state (text-secondary) / background (`#808080`, `#9A9A9A`) | **3.95:1** | 5.92:1 | ≥ 4.5 | light under AA: 17pt regular is not large text (WCAG needs 18.66px bold or 24px); it is the strongest grey the system palette offers, and Increase Contrast raises it |
 | on-selection / selection (`#FFFFFF` on `#0064E1`, `#0059D1`) | 5.37:1 | 6.27:1 | ≥ 4.5 | pass |
@@ -330,8 +332,9 @@ drop-target outline (a window-sized frame, so a larger radius). There are no car
 avatars or sheets of the app's own, so no `lg` or `full` level is defined; add one when a second
 use appears, and keep one radius per hierarchy level rather than one per view.
 
-Icons are SF Symbols at the sidebar's 16pt: `folder`, `doc.text` and `photo`, regular weight, matching the
-row's text style. No other icons exist. Illustration: none; the empty state is a sentence.
+Icons are SF Symbols, regular weight: `folder`, `doc.text` and `photo` at the sidebar's 16pt, matching the
+row's text style, and `square` / `checkmark.square.fill` for task-list boxes in the document
+(`task-box-size`, `text-secondary`). No other icons exist. Illustration: none; the empty state is a sentence.
 
 ### Brand
 
@@ -390,9 +393,13 @@ Empty: see Empty state.
 mono at proportional size), links (`link` colour, ⌘-click opens, pointer is the system's).
 Markers hide per span and reveal when the selection touches them.
 
-**Lists** — bullet, ordered and task items. Markers stay visible and dimmed (`text-secondary`)
-rather than hidden, because hiding them made editing fragile; the bullet hangs in a 20pt indent.
-Return continues the list, Return on an empty item ends it, Tab / ⇧Tab change the level.
+**Lists** — bullet, ordered and task items. Bullet and ordered markers stay visible and dimmed
+(`text-secondary`). A task item's `- [ ]` is drawn as a checkbox (`square`, or
+`checkmark.square.fill` when checked) while the caret is off the line; on the line the source shows
+dimmed in the same place — the hidden characters keep their width, so nothing moves. A plain click
+on the box, or Format › Toggle Task (⇧⌘U), writes `[x]` or `[ ]` into the file as one undoable
+edit; ⌘/⌥/⇧-click places the caret instead. A checked item's text is `text-secondary`. Wrapped
+lines hang under the item text (the hang is the marker's width). Return continues the list, Return on an empty item ends it, Tab / ⇧Tab change the level.
 
 **Block quote** — `text-secondary` text indented 16pt behind a 3pt `divider` bar; the `>` is a
 hidden line marker.
@@ -488,7 +495,7 @@ About. No custom menu styling.
   contrast; the fix is Increase Contrast or a different semantic colour.
 - Don't add a toolbar, status bar, word count, theme picker or preview toggle. The README's scope
   line ("anything beyond that is out of scope until it's actually missed") is a design rule.
-- Don't hide list markers, add icons to headings, colour headings, or draw shadows in the
+- Don't hide bullet or ordered markers (task boxes are the one drawn marker), add icons to headings, colour headings, or draw shadows in the
   document. The document is monochrome text with quiet fills and hairlines.
 - Don't add a token for a value used once, and don't define semantic roles the app has no use for.
 - Don't let the download site's palette (`site/style.css`) into the app, or the app's into the site.
