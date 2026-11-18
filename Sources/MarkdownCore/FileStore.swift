@@ -110,6 +110,31 @@ public enum FileStore {
         if let writeError { throw writeError }
     }
 
+    /// Moves the file at `source` to `destination` under file coordination. Never replaces: anything
+    /// already at `destination` throws `CocoaError.fileWriteFileExists` and leaves both untouched.
+    /// Presenters of the file other than `presenter` hear `presentedItemDidMove`; the caller updates its
+    /// own presenter (a coordinator never notifies the presenter it was created with).
+    public static func move(_ source: URL, to destination: URL, presenter: NSFilePresenter? = nil) throws {
+        if FileManager.default.fileExists(atPath: destination.path) {
+            throw CocoaError(.fileWriteFileExists, userInfo: [NSFilePathErrorKey: destination.path])
+        }
+        let coordinator = NSFileCoordinator(filePresenter: presenter)
+        var coordinationError: NSError?
+        var moveError: Error?
+        coordinator.coordinate(writingItemAt: source, options: .forMoving,
+                               writingItemAt: destination, options: .forReplacing,
+                               error: &coordinationError) { from, to in
+            do {
+                try FileManager.default.moveItem(at: from, to: to)   // refuses an existing name (516) by itself too
+                coordinator.item(at: from, didMoveTo: to)
+            } catch {
+                moveError = error
+            }
+        }
+        if let coordinationError { throw coordinationError }
+        if let moveError { throw moveError }
+    }
+
     private static func replace(_ url: URL, with data: Data, createIfMissing: Bool) throws -> Bool {
         let fm = FileManager.default
         guard fm.fileExists(atPath: url.path) else {

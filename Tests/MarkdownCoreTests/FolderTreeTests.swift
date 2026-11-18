@@ -72,6 +72,22 @@ final class FolderTreeTests: XCTestCase {
         XCTAssertEqual(root.node(for: dir.appendingPathComponent("sub/n.md"))?.name, "n.md")
         XCTAssertNil(root.node(for: dir.appendingPathComponent("c.txt")))
     }
+
+    func testNodeLookupIgnoresATrailingSlash() {
+        let root = FileNode(url: dir, isDirectory: true)
+        root.loadChildren()
+        let sub = root.children?.first { $0.name == "sub" }
+        XCTAssertNotNil(sub)
+        // Panel and deletingLastPathComponent() folder URLs carry a trailing "/"; others may not.
+        let withSlash = URL(fileURLWithPath: dir.path + "/sub/", isDirectory: true)
+        let withoutSlash = URL(fileURLWithPath: dir.path + "/sub", isDirectory: false)
+        XCTAssertTrue(root.loadedNode(for: withSlash) === sub)
+        XCTAssertTrue(root.loadedNode(for: withoutSlash) === sub)
+        XCTAssertTrue(root.node(for: withSlash) === sub)
+        XCTAssertTrue(root.node(for: withoutSlash) === sub)
+        XCTAssertTrue(root.loadedNode(for: URL(fileURLWithPath: dir.path + "/", isDirectory: true)) === root)
+        XCTAssertTrue(root.loadedNode(for: URL(fileURLWithPath: dir.path, isDirectory: false)) === root)
+    }
 }
 
 final class OpenTargetTests: XCTestCase {

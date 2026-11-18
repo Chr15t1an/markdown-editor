@@ -179,6 +179,34 @@ final class FileSession: NSObject, NSFilePresenter, @unchecked Sendable {
         }
     }
 
+    /// Save As: writes the buffer to `url` in the note's encoding and continues on that file. The
+    /// current file keeps whatever was last saved to it. Works when saving to the current file is
+    /// failing (the buffer lands in the new one). Throws, staying on the current file, when the write fails.
+    @MainActor func saveAs(to url: URL) throws {
+        guard let current = currentURL else { throw CocoaError(.fileNoSuchFile) }
+        let url = url.standardizedFileURL
+        if url.path == current.path {
+            if !save() { throw lastSaveError ?? CocoaError(.fileWriteUnknown) }
+            return
+        }
+        // A name differing only in case (a.md → A.md on a case-insensitive volume) is the same file:
+        // the write below rewrites it in place and the rebind just adopts the new spelling. Harmless.
+        let text = editor.text
+        try FileStore.write(text, to: url, encoding: encoding, createIfMissing: true, presenter: self)
+        let saved = url.standardizedFileURL   // again, now that it exists
+        let recovered = lastSaveError != nil
+        detach()                              // stops the timer, unregisters the old URL
+        setURL(saved)
+        lastSavedText = text
+        lastModificationDate = FileStore.modificationDate(saved)
+        isDirty = false
+        lastSaveError = nil
+        editor.baseURL = saved.deletingLastPathComponent()
+        NSFileCoordinator.addFilePresenter(self)
+        if recovered { onSaveRecovered?() }
+        ProbeLog.shared.dump()
+    }
+
     @MainActor private func closeExternally(_ url: URL) {
         forget()
         onClosedExternally?(url)

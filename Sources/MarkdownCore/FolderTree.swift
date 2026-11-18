@@ -50,7 +50,7 @@ public final class FileNode {
     /// The loaded descendant (or self) whose URL is `target`, without reading the disk.
     public func loadedNode(for target: URL) -> FileNode? {
         let target = target.standardizedFileURL
-        if url == target { return self }
+        if url.path == target.path { return self }   // slash-agnostic: folder URLs may or may not end in "/"
         let mine = url.pathComponents, theirs = target.pathComponents
         guard theirs.count > mine.count, Array(theirs.prefix(mine.count)) == mine else { return nil }
         for child in children ?? [] {
@@ -62,7 +62,7 @@ public final class FileNode {
     /// The descendant whose URL is `target`, reading directories on the way as needed.
     public func node(for target: URL) -> FileNode? {
         let target = target.standardizedFileURL
-        if url == target { return self }
+        if url.path == target.path { return self }   // slash-agnostic: folder URLs may or may not end in "/"
         let mine = url.pathComponents, theirs = target.pathComponents
         guard isDirectory, theirs.count > mine.count, Array(theirs.prefix(mine.count)) == mine else { return nil }
         let next = theirs[mine.count]
