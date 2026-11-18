@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 #
-# Verifiable outcome for task-list checkboxes: wait for the `Test` workflow run on the worktree's
-# HEAD sha (public GitHub API) and pass only when that run concluded `success` and the task-list
+# Verifiable outcome for File › Save As… and Move To…: wait for the `Test` workflow run on the worktree's
+# HEAD sha (public GitHub API) and pass only when that run concluded `success` and the Save As / Move To
 # tests exist in HEAD's tree.
 #
 #   scripts/verify-outcome.sh <worktree>
@@ -26,17 +26,18 @@ MISSING_WAIT="${OUTCOME_MISSING_WAIT:-300}"
 WORKFLOW_NAME="Test"
 WORKFLOW_PATH=".github/workflows/test.yml"
 TESTS=(
-  testTaskItemGetsCheckboxAndHiddenMarker
-  testCheckedTaskTextIsDimmed
-  testTaskMarkerHiddenUnlessCaretOnLine
-  testTaskContentDoesNotShiftWhenMarkerReveals
-  testTaskBoxDrawnOnlyWhileMarkerHidden
-  testToggleTaskRewritesOnlyTheBox
-  testClickOnTaskBoxTogglesWithOneUndo
-  testClickOutsideTaskBoxOrWithModifierDoesNotToggle
-  testToggleTaskMenuActionTogglesCaretLine
-  testReturnAndTabOnTaskItemsStillWork
-  testToggleTaskMarksDirtyAndSaves
+  testMoveRefusesATakenNameAndChangesNothing
+  testSaveAsWritesTheBufferAndContinuesOnTheNewFile
+  testSaveAsKeepsTheNoteEncoding
+  testSaveAsRecoversFromAFailingSave
+  testFileMenuHasSaveAsAndMoveTo
+  testSaveAsAndMoveToAreDisabledWithNoNoteOpen
+  testSaveAsSelectsTheNewFileAndLaterEditsSaveThere
+  testSaveAsOutsideTheRootOpensItsFolder
+  testMoveToMovesTheNoteAndTheEditorFollows
+  testMoveToRefusesATakenNameAndReportsIt
+  testMoveToOutsideTheRootKeepsTheNoteOpen
+  testMenuActionsUseTheChosenLocationAndCancelChangesNothing
 )
 
 if ! sha="${OUTCOME_SHA:-$(git -C "$WT" rev-parse HEAD 2>/dev/null)}" || [[ -z "$sha" ]]; then

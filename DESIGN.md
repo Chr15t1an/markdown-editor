@@ -462,7 +462,9 @@ to decode. One sentence, no button; the action
 is the drag or the sidebar.
 
 **Alerts** — `NSAlert` sheets only: open failure ("Couldn’t open “X”"), create failure
-("Couldn’t create a new note in “X”"), save failure ("Your changes couldn’t be saved", with the
+("Couldn’t create a new note in “X”"), Save As failure ("Couldn’t save “X”"), Move To failure
+("Couldn’t move “X”" — when the folder already has a file of that name: "A file named “X” is already
+in “Folder”. Nothing was moved."), save failure ("Your changes couldn’t be saved", with the
 reason and what happens next), and the critical Keep Editing / Discard Changes choice. The
 update check (`UpdateChecker.swift`) adds four: "Markdown Editor X.Y.Z is available"
 (**Download** / **Skip This Version**: the automatic check shows each version once), "You’re up to date" (**OK**), "Couldn’t check for updates"
@@ -471,7 +473,10 @@ update check (`UpdateChecker.swift`) adds four: "Markdown Editor X.Y.Z is availa
 automatic notice waits for the next check. Titles say what happened; body says why and what to do.
 
 **Menus** — the standard App / File / Edit / Format / View / Window menus built in code; Format
-holds the markdown actions with their ⌘ shortcuts. The App menu adds **Check for Updates…** and
+holds the markdown actions with their ⌘ shortcuts. File adds **Save As…** (⇧⌘S) and **Move To…**
+under Save: Save As writes the note to a new file and keeps editing it, Move To moves the note — or
+the image on screen — into a chosen folder and keeps it open; both are disabled when nothing they
+apply to is open, and use AppKit’s own save/open panels. The App menu adds **Check for Updates…** and
 **Check for Updates Automatically** (a checkmark item, off until the user turns it on) under
 About. No custom menu styling.
 
