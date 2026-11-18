@@ -50,7 +50,7 @@ enum MainMenu {
         return menu
     }
 
-    private static func fileMenu() -> NSMenu {
+    static func fileMenu() -> NSMenu {
         let menu = NSMenu(title: "File")
         menu.addItem(item("New", #selector(EditorMenuActions.newDocument(_:)), "n"))
         menu.addItem(item("Open…", #selector(EditorMenuActions.openDocument(_:)), "o"))
@@ -63,6 +63,8 @@ enum MainMenu {
         menu.addItem(.separator())
         menu.addItem(item("Close Window", #selector(NSWindow.performClose(_:)), "w"))
         menu.addItem(item("Save", #selector(EditorMenuActions.saveDocument(_:)), "s"))
+        menu.addItem(item("Save As…", #selector(DocumentFileActions.saveDocumentAs(_:)), "s", [.command, .shift]))
+        menu.addItem(item("Move To…", #selector(DocumentFileActions.moveDocument(_:))))
         return menu
     }
 
