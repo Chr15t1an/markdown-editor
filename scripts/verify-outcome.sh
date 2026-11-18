@@ -30,6 +30,7 @@ TESTS=(
   testSaveAsWritesTheBufferAndContinuesOnTheNewFile
   testSaveAsKeepsTheNoteEncoding
   testSaveAsRecoversFromAFailingSave
+  testSaveAsToTheCurrentNameAfterAnExternalDeleteRecreatesIt
   testFileMenuHasSaveAsAndMoveTo
   testSaveAsAndMoveToAreDisabledWithNoNoteOpen
   testSaveAsSelectsTheNewFileAndLaterEditsSaveThere

@@ -185,7 +185,9 @@ final class FileSession: NSObject, NSFilePresenter, @unchecked Sendable {
     @MainActor func saveAs(to url: URL) throws {
         guard let current = currentURL else { throw CocoaError(.fileNoSuchFile) }
         let url = url.standardizedFileURL
-        if url.path == current.path {
+        // Same file, still on disk: just Save. If it was deleted outside the app, fall through so the
+        // write below recreates it with the buffer (save() would close a deleted note, or write nothing).
+        if url.path == current.path, FileManager.default.fileExists(atPath: url.path) {
             if !save() { throw lastSaveError ?? CocoaError(.fileWriteUnknown) }
             return
         }

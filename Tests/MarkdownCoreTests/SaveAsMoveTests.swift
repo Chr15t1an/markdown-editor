@@ -127,6 +127,29 @@ final class SaveAsSessionTests: XCTestCase {
         XCTAssertEqual(session.currentURL?.path, a.path)
         XCTAssertFalse(session.isDirty)
     }
+
+    func testSaveAsToTheCurrentNameAfterAnExternalDeleteRecreatesIt() throws {
+        // Clean buffer: the note was deleted outside the app (rm, git checkout); Save As to its own name
+        // must write it back, not report success with nothing on disk.
+        let a = try file("a.md", "A\n")
+        XCTAssertTrue(session.open(a))
+        try FileManager.default.removeItem(at: a)
+        try session.saveAs(to: a)
+        XCTAssertEqual(try String(contentsOf: a, encoding: .utf8), "A\n")
+        XCTAssertEqual(session.currentURL?.path, a.path)
+        XCTAssertFalse(session.isDirty)
+
+        // Dirty buffer: the unsaved text is the only copy; it must land in the recreated file and the
+        // note must stay open.
+        type("only copy")
+        XCTAssertTrue(session.isDirty)
+        try FileManager.default.removeItem(at: a)
+        try session.saveAs(to: a)
+        XCTAssertEqual(try String(contentsOf: a, encoding: .utf8), "A\nonly copy")
+        XCTAssertEqual(session.currentURL?.path, a.path)
+        XCTAssertFalse(session.isDirty)
+        XCTAssertEqual(editor.text, "A\nonly copy")
+    }
 }
 
 @MainActor
