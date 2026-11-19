@@ -72,6 +72,11 @@ File › New (⌘N) creates an empty `Untitled.md` (then `Untitled 2.md`, …) i
 the sidebar (or the open file's folder), selects it and puts the cursor in it — rename it in Finder.
 With no folder open, it asks where to save the new note and opens that folder.
 
+File › Save As… (⇧⌘S) saves the note under a new name or in another folder and keeps editing the new
+file; the original stays as it was last saved. File › Move To… moves the note (or the image you're
+viewing) into a folder you choose and keeps it open — if that folder already has a file with the same
+name, nothing moves.
+
 Opening a single `.md` file selects it in place when it is inside the folder already open;
 a file from anywhere else opens its own folder with that file selected. The last folder and file
 reopen at launch. Files save automatically a second after you stop typing, when you switch files,

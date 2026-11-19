@@ -10,12 +10,15 @@ Heading format: `## X.Y.Z — YYYY-MM-DD` (the version must match `scripts/check
 
 ## Unreleased
 
-Task lists show checkboxes you can tick.
+Task lists show checkboxes you can tick, and the File menu gains Save As… and Move To….
 
 - `- [ ]` and `- [x]` items draw a checkbox in place of the markdown; click it to tick or untick,
   and the file saves `[x]` or `[ ]`. ⌘Z undoes it, and Format › Toggle Task (⇧⌘U) does the same
   from the keyboard. Checked items dim their text.
 - Put the cursor on a task line to see and edit its `- [ ]` source; nothing moves when it appears.
+- File › Save As… (⇧⌘S) saves the note under a new name or folder and keeps editing the copy;
+  File › Move To… moves the note or the image on screen into another folder and keeps it open, and never
+  replaces a file already there.
 
 ## 0.5.0 — 2026-11-11
 

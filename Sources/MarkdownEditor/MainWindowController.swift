@@ -2,8 +2,15 @@ import AppKit
 import MarkdownCore
 import UniformTypeIdentifiers
 
+/// File › Save As… and File › Move To…, answered by the main window (AppKit's selector names;
+/// the app has no NSDocument, so nothing else in the chain implements them).
+@MainActor @objc protocol DocumentFileActions {
+    func saveDocumentAs(_ sender: Any?)
+    func moveDocument(_ sender: Any?)
+}
+
 /// The one main window: sidebar folder tree + editor, and every "open this" path.
-final class MainWindowController: NSWindowController, NSWindowDelegate {
+final class MainWindowController: NSWindowController, NSWindowDelegate, DocumentFileActions, NSMenuItemValidation {
     static let lastFolderKey = "lastFolder"
     static let lastFileKey = "lastFile"
 
@@ -19,6 +26,16 @@ final class MainWindowController: NSWindowController, NSWindowDelegate {
 
     /// The app's one theme, handed to every view that draws with it.
     let theme: Theme
+
+    /// Picks the Save As file (an NSSavePanel); nil = cancelled. Replaceable in tests.
+    var chooseSaveAsURL: @MainActor (URL) -> URL? = { MainWindowController.runSaveAsPanel(for: $0) }
+    /// Picks the Move To folder (an NSOpenPanel); nil = cancelled. Replaceable in tests.
+    var chooseMoveDestination: @MainActor (URL) -> URL? = { MainWindowController.runMovePanel(for: $0) }
+    /// Shows an alert for Save As / Move To; a sheet on the window. Replaceable in tests.
+    lazy var presentAlert: @MainActor (NSAlert) -> Void = { [weak self] alert in
+        guard let window = self?.window else { return }
+        alert.beginSheetModal(for: window)
+    }
 
     init(theme: Theme = Theme()) {
         self.theme = theme
@@ -261,6 +278,128 @@ final class MainWindowController: NSWindowController, NSWindowDelegate {
         alert.messageText = "Couldn’t create a new note in “\(dir.lastPathComponent)”"
         alert.informativeText = error.localizedDescription
         alert.beginSheetModal(for: window)
+    }
+
+    // MARK: Save As / Move To
+
+    @objc func saveDocumentAs(_ sender: Any?) {
+        guard let current = session.currentURL, let url = chooseSaveAsURL(current) else { return }
+        saveAs(to: url)
+    }
+
+    @objc func moveDocument(_ sender: Any?) {
+        guard let current = session.currentURL ?? viewedImage,
+              let dir = chooseMoveDestination(current) else { return }
+        moveOpenFile(to: dir)
+    }
+
+    func validateMenuItem(_ menuItem: NSMenuItem) -> Bool {
+        switch menuItem.action {
+        case #selector(saveDocumentAs(_:)): return session.currentURL != nil
+        case #selector(moveDocument(_:)): return session.currentURL != nil || viewedImage != nil
+        default: return true
+        }
+    }
+
+    /// Save As to a chosen file: the buffer is written there and the editor continues on it. Inside the
+    /// open folder the sidebar selects the new file; outside it, its folder opens (as Open… does).
+    @discardableResult
+    func saveAs(to url: URL) -> Bool {
+        guard session.currentURL != nil else { return false }
+        do {
+            try session.saveAs(to: url)
+        } catch {
+            let alert = NSAlert(error: error)
+            alert.messageText = "Couldn’t save “\(url.lastPathComponent)”"
+            alert.informativeText = error.localizedDescription
+            presentAlert(alert)
+            return false
+        }
+        guard let file = session.currentURL else { return false }
+        let dir = file.deletingLastPathComponent().standardizedFileURL
+        if let root = folder, Self.isInside(dir, root) {
+            sidebar.refresh(directory: dir)
+            sidebar.reveal(file)
+            updateSubtitle()
+            UserDefaults.standard.set(file.path, forKey: Self.lastFileKey)
+        } else {
+            let selection = editor.textView.selectedRange()
+            open(file)   // outside the root: open its folder, as Open… and File › New's panel do
+            let length = (editor.text as NSString).length
+            let location = min(selection.location, length)
+            editor.textView.setSelectedRange(NSRange(location: location, length: min(selection.length, length - location)))
+        }
+        ProbeLog.shared.dump()
+        return true
+    }
+
+    /// Move To: moves the open note (or the image on screen) into `destination` under its name; it stays
+    /// open. A taken name is refused and nothing changes. Moving outside the open folder keeps the
+    /// folder, with the note open outside it (as after a Finder move).
+    @discardableResult
+    func moveOpenFile(to destination: URL) -> Bool {
+        guard let source = session.currentURL ?? viewedImage else { return false }
+        let sourceDir = source.deletingLastPathComponent().standardizedFileURL
+        let destDir = destination.standardizedFileURL
+        if destDir.resolvingSymlinksInPath().path == sourceDir.resolvingSymlinksInPath().path { return true }
+        let target = destDir.appendingPathComponent(source.lastPathComponent).standardizedFileURL
+        session.save()   // the moved file carries the latest text; a failing save stays dirty and follows the note
+        do {
+            try FileStore.move(source, to: target, presenter: session)
+        } catch {
+            let alert = NSAlert()
+            alert.messageText = "Couldn’t move “\(source.lastPathComponent)”"
+            if let error = error as? CocoaError, error.code == .fileWriteFileExists {
+                alert.informativeText = "A file named “\(source.lastPathComponent)” is already in “\(destDir.lastPathComponent)”. Nothing was moved."
+            } else {
+                alert.informativeText = error.localizedDescription
+            }
+            presentAlert(alert)
+            return false
+        }
+        if viewedImage != nil {
+            viewedImage = target
+            viewedImageDate = FileStore.modificationDate(target)
+            editor.showImage(target)   // the viewer re-decodes from its own URL on zoom/resize
+            UserDefaults.standard.set(target.path, forKey: Self.lastFileKey)
+            updateSubtitle()
+        } else {
+            session.handleMove(to: target)   // the coordinator does not notify its own presenter
+        }
+        if let root = folder {
+            if Self.isInside(sourceDir, root) { sidebar.refresh(directory: sourceDir) }
+            if Self.isInside(destDir, root) {
+                sidebar.refresh(directory: destDir)
+                sidebar.reveal(target)
+            } else {
+                sidebar.selectFile(nil)   // kept open outside the root, like a note moved there in Finder
+            }
+        }
+        ProbeLog.shared.dump()
+        return true
+    }
+
+    @MainActor private static func runSaveAsPanel(for current: URL) -> URL? {
+        let panel = NSSavePanel()
+        panel.title = "Save As"
+        panel.nameFieldStringValue = current.lastPathComponent
+        panel.directoryURL = current.deletingLastPathComponent()
+        panel.allowedContentTypes = FolderTree.markdownExtensions.compactMap { UTType(filenameExtension: $0) }
+        panel.canCreateDirectories = true
+        return panel.runModal() == .OK ? panel.url : nil
+    }
+
+    @MainActor private static func runMovePanel(for current: URL) -> URL? {
+        let panel = NSOpenPanel()
+        panel.title = "Move To"
+        panel.message = "Choose the folder to move “\(current.lastPathComponent)” into."
+        panel.prompt = "Move"
+        panel.canChooseFiles = false
+        panel.canChooseDirectories = true
+        panel.canCreateDirectories = true
+        panel.allowsMultipleSelection = false
+        panel.directoryURL = current.deletingLastPathComponent()
+        return panel.runModal() == .OK ? panel.url : nil
     }
 
     /// Reopens the folder from the previous run as the root, and selects the last file in it
