@@ -45,17 +45,39 @@ final class AppDelegate: NSObject, NSApplicationDelegate, EditorMenuActions, NSM
     private func startUpdateChecker() {
         let checker = UpdateChecker(feedURL: UpdateChecker.resolveFeedURL(),
                                     currentVersion: UpdateChecker.bundleVersion())
-        let alerts = UpdateAlerts(
+        var alerts = UpdateAlerts(
             window: { [weak self] in self?.windowController?.window },
             openURL: { NSWorkspace.shared.open($0) },
             answer: { [weak checker] enabled in
                 guard let checker else { return }
                 Task { @MainActor in await checker.answerAutomaticQuestion(enabled) }
             })
-        checker.present = { alerts.present($0) }
+        alerts.installable = { [weak checker] feed in
+            guard UpdateInstaller().locationProblem() == nil else { return nil }
+            return checker?.package(for: feed)
+        }
+        alerts.install = { [weak self] package in self?.installUpdate(package) }
+        let presentAlerts = alerts
+        checker.present = { presentAlerts.present($0) }
         updateChecker = checker
         guard !UserDefaults.standard.bool(forKey: UpdateChecker.disabledKey) else { return }
         Task { @MainActor in await checker.handleLaunch() }
+    }
+
+    /// Install and Relaunch: download + verify + stage, save the note, swap, quit; the helper reopens.
+    /// Any failure leaves the installed copy untouched and offers Download instead.
+    private func installUpdate(_ package: UpdatePackage) {
+        Task { @MainActor in
+            let installer = UpdateInstaller()
+            do {
+                let staged = try await installer.prepare(package)
+                guard windowController?.prepareToClose() ?? true else { installer.discard(staged); return }
+                try installer.installAndScheduleRelaunch(staged)
+                NSApp.terminate(nil)
+            } catch {
+                _ = updateChecker?.present(.installFailed(message: error.localizedDescription))
+            }
+        }
     }
 
     /// Dock-icon drop, Finder "Open With", `open -a "Markdown Editor" <path>`, Open Recent.

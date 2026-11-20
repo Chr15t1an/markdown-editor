@@ -467,8 +467,8 @@ is the drag or the sidebar.
 in “Folder”. Nothing was moved."), save failure ("Your changes couldn’t be saved", with the
 reason and what happens next), and the critical Keep Editing / Discard Changes choice. The
 update check (`UpdateChecker.swift`) adds four: "Markdown Editor X.Y.Z is available"
-(**Download** / **Skip This Version**: the automatic check shows each version once), "You’re up to date" (**OK**), "Couldn’t check for updates"
-(warning, the reason, **OK**), and once, on the second launch, "Check for updates automatically?"
+(**Install and Relaunch** for a signed release this copy can replace, else **Download** / **Skip This Version**: the automatic check shows each version once), "You’re up to date" (**OK**), "Couldn’t check for updates"
+(warning, the reason, **OK**), "Couldn’t install the update" (warning, the reason, **Download** / **OK**), and once, on the second launch, "Check for updates automatically?"
 (**Check Automatically** / **Don’t Check**). Update sheets never stack: if another sheet is up, an
 automatic notice waits for the next check. Titles say what happened; body says why and what to do.
 

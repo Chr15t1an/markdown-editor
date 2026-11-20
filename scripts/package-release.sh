@@ -123,6 +123,26 @@ fi
 
 SHA256="$(cut -d ' ' -f 1 "$DIST/$ZIP.sha256")"
 
+# --------------------------------------------------------------- update signature
+# Ed25519 over (version, SHA-256), so installed apps can install this zip themselves (UpdateInstaller).
+# Key: $MARKDOWN_EDITOR_UPDATE_KEY (CI secret) or the login keychain (scripts/update-key.sh create).
+# It must match the MEUpdatePublicKey the installed apps carry (Resources/Info.plist). With no key the
+# run stops, unless MARKDOWN_EDITOR_UNSIGNED_FEED=1: then version.json has no signature and apps
+# offer only Download, as before 0.7.0.
+SIGNATURE=""
+if [[ "${MARKDOWN_EDITOR_UNSIGNED_FEED:-0}" == 1 ]]; then
+  echo "warning: MARKDOWN_EDITOR_UNSIGNED_FEED=1 — version.json is unsigned; apps will offer Download only" >&2
+else
+  UPDATE_KEY="${MARKDOWN_EDITOR_UPDATE_KEY:-$(security find-generic-password -s markdown-editor-update-key -a release -w 2>/dev/null || true)}"
+  [[ -n "$UPDATE_KEY" ]] || { echo "error: no update-signing key (MARKDOWN_EDITOR_UPDATE_KEY or scripts/update-key.sh create); set MARKDOWN_EDITOR_UNSIGNED_FEED=1 to ship without in-app install" >&2; exit 1; }
+  SIGNER="$(scripts/update-key.sh tool | tail -n 1)"
+  SIGNATURE="$(MARKDOWN_EDITOR_UPDATE_KEY="$UPDATE_KEY" "$SIGNER" sign "$VERSION" "$SHA256")"
+  unset UPDATE_KEY
+  PUBLIC_KEY="$(/usr/libexec/PlistBuddy -c 'Print :MEUpdatePublicKey' Resources/Info.plist)"
+  "$SIGNER" verify "$VERSION" "$SHA256" "$SIGNATURE" "$PUBLIC_KEY" \
+    || { echo "error: the signature does not verify with Resources/Info.plist's MEUpdatePublicKey (wrong key?)" >&2; exit 1; }
+fi
+
 # --------------------------------------------------------------- site
 # Everything in site/ except the templates and the wrangler config is copied as-is; index.html,
 # install.sh and version.json are rendered from their templates so version, size and SHA always
@@ -145,6 +165,7 @@ render() {  # render <template> <output>
       -e "s|{{SHA256}}|$SHA256|g" \
       -e "s|{{ZIP_VERSIONED}}|$ZIP|g" \
       -e "s|{{ZIP}}|$LATEST|g" \
+      -e "s|{{SIGNATURE}}|$SIGNATURE|g" \
       "$1" > "$2"
   if grep -q '{{' "$2"; then
     echo "error: unrendered token in $2" >&2; exit 1
@@ -162,4 +183,5 @@ cp "$DIST/$ZIP" "$DIST/$LATEST" "$DIST/$ZIP.sha256" "$SITE_OUT/"
 echo "version  $VERSION"
 echo "zip      $PWD/$DIST/$ZIP"
 echo "sha256   $SHA256"
+if [[ -n "$SIGNATURE" ]]; then echo "signed   yes (in-app install)"; else echo "signed   NO (apps offer Download only)"; fi
 echo "site     $PWD/$SITE_OUT"

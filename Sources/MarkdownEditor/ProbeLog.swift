@@ -15,6 +15,7 @@ import AppKit
 ///   row <name>           click the sidebar row with that name
 ///   open <path>          open a folder or file
 ///   snapshot <png>       render the window content to a PNG
+///   button <title>       press that button on the sheet in front (update alerts)
 ///   dump                 rewrite the state file
 /// The state also carries `alert`: the title of the update sheet on screen ("" when none).
 @MainActor

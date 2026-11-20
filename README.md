@@ -86,8 +86,14 @@ title bar says "Not saved", and switching away or quitting asks Keep Editing / D
 ⌘⇧L toggles the sidebar.
 
 **Updates.** Markdown Editor › Check for Updates… asks the download site whether a newer version
-exists and, if so, offers **Download** (which opens the site). The app makes no network request
-otherwise. On the second launch it asks once whether to check automatically; if you turn on
+exists and, if so, offers **Install and Relaunch**: the app saves your note, downloads the release,
+and installs it in place of itself only if the release's Ed25519 signature (made with a key only the
+release builder holds; the public half ships in the app) covers that exact version and SHA-256, the
+zip matches that SHA-256, and the app inside passes `codesign --verify --strict` with the same bundle
+id and version. Any failed check leaves the installed copy untouched and offers **Download** (the
+site) instead, as does a copy macOS is running from a temporary "translocated" location or one in a
+folder you can't write to. The app makes no network request otherwise. On the second launch it asks
+once whether to check automatically; if you turn on
 update checks (or tick Markdown Editor › Check for Updates Automatically), the app asks the download
 site (markdown.chri5tian.com) once a day for the latest version number — like any web request, the site sees your IP address;
 nothing else is sent. No tracking.

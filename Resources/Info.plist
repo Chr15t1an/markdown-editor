@@ -78,6 +78,8 @@
 	<string>15.0</string>
 	<key>MEUpdateFeedURL</key>
 	<string>https://markdown.chri5tian.com/version.json</string>
+	<key>MEUpdatePublicKey</key>
+	<string>7qJMccmy4+Dng77L7Uiwy/P/7ZmZeAj4tm47qTHS4/g=</string>
 	<key>NSDesktopFolderUsageDescription</key>
 	<string>Markdown Editor opens the folders of notes you drop on it.</string>
 	<key>NSDocumentsFolderUsageDescription</key>

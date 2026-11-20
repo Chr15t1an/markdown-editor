@@ -538,6 +538,11 @@ final class MainWindowController: NSWindowController, NSWindowDelegate, Document
                   let rep = view.bitmapImageRepForCachingDisplay(in: view.bounds) else { return }
             view.cacheDisplay(in: view.bounds, to: rep)
             try? rep.representation(using: .png, properties: [:])?.write(to: URL(fileURLWithPath: arg))
+        case "button":
+            // Presses the button with that title on the sheet in front (e.g. an update alert).
+            func buttons(_ view: NSView) -> [NSButton] { ((view as? NSButton).map { [$0] } ?? []) + view.subviews.flatMap(buttons) }
+            guard let sheet = window?.attachedSheet?.contentView else { return }
+            buttons(sheet).first { $0.title == arg }?.performClick(nil)
         default:
             break
         }

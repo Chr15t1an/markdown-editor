@@ -1,8 +1,9 @@
 import AppKit
 import MarkdownCore
 
-/// The app's only network request: an optional check of the site's `version.json` for a newer
-/// release. It is a notice plus a link to the site, not an updater (ad-hoc builds can't use Sparkle).
+/// The app's only network requests: an optional check of the site's `version.json` for a newer
+/// release, and — only when the user clicks **Install and Relaunch** — the signed release zip
+/// (`UpdateInstaller`). A feed without a valid signature only offers **Download** (opens the site).
 ///
 /// - Manual: app menu › Check for Updates… always fetches and always says what it found.
 /// - Automatic: off until the user answers a one-time sheet on the second launch (or ticks
@@ -20,6 +21,8 @@ final class UpdateChecker {
     static let feedURLKey = "MEUpdateFeedURL"
     /// Launch argument or default that keeps the launch path from asking or checking (for probes).
     static let disabledKey = "MEUpdateCheckDisabled"
+    /// Info.plist key with the base64 Ed25519 public key that release feeds must be signed with.
+    static let publicKeyKey = "MEUpdatePublicKey"
     nonisolated static let userAgent = "Markdown Editor"
 
     typealias Fetch = @Sendable (URL) async throws -> Data
@@ -29,6 +32,7 @@ final class UpdateChecker {
         case upToDate(current: String)
         case failed(message: String)
         case askToEnable
+        case installFailed(message: String)
     }
 
     enum Outcome: Equatable {
@@ -176,6 +180,16 @@ final class UpdateChecker {
         return nil
     }
 
+    static func publicKey(_ bundle: Bundle = .main) -> String? {
+        bundle.object(forInfoDictionaryKey: publicKeyKey) as? String
+    }
+
+    /// The signed, installable release behind `feed`, or nil (then only **Download** is offered).
+    func package(for feed: UpdateFeed, publicKey: String? = UpdateChecker.publicKey()) -> UpdatePackage? {
+        guard let feedURL else { return nil }
+        return UpdateCheck.package(for: feed, feedURL: feedURL, publicKey: publicKey)
+    }
+
     static func bundleVersion(_ bundle: Bundle = .main) -> String {
         bundle.object(forInfoDictionaryKey: "CFBundleShortVersionString") as? String ?? MarkdownCore.version
     }
@@ -188,6 +202,9 @@ struct UpdateAlerts {
     let window: () -> NSWindow?
     let openURL: (URL) -> Void
     let answer: (Bool) -> Void
+    /// The installable release for a feed, when this copy can replace itself; nil = Download only.
+    var installable: (UpdateFeed) -> UpdatePackage? = { _ in nil }
+    var install: (UpdatePackage) -> Void = { _ in }
 
     func present(_ presentation: UpdateChecker.Presentation) -> Bool {
         let alert = NSAlert()
@@ -196,11 +213,17 @@ struct UpdateAlerts {
         switch presentation {
         case let .available(feed, current):
             alert.messageText = "Markdown Editor \(feed.version) is available"
-            alert.informativeText = "You have \(current). Download the new version from markdown.chri5tian.com."
-            alert.addButton(withTitle: "Download")
+            if let package = installable(feed) {
+                alert.informativeText = "You have \(current). The update is signed and checked before it’s installed; your note is saved first."
+                alert.addButton(withTitle: "Install and Relaunch")
+                onFirstButton = { install(package) }
+            } else {
+                alert.informativeText = "You have \(current). Download the new version from markdown.chri5tian.com."
+                alert.addButton(withTitle: "Download")
+                let url = UpdateCheck.downloadURL(for: feed)
+                onFirstButton = { openURL(url) }
+            }
             alert.addButton(withTitle: "Skip This Version")   // the automatic check shows a version once
-            let url = UpdateCheck.downloadURL(for: feed)
-            onFirstButton = { openURL(url) }
         case let .upToDate(current):
             alert.messageText = "You’re up to date"
             alert.informativeText = "Markdown Editor \(current) is the newest version."
@@ -210,6 +233,13 @@ struct UpdateAlerts {
             alert.messageText = "Couldn’t check for updates"
             alert.informativeText = message
             alert.addButton(withTitle: "OK")
+        case let .installFailed(message):
+            alert.alertStyle = .warning
+            alert.messageText = "Couldn’t install the update"
+            alert.informativeText = message
+            alert.addButton(withTitle: "Download")
+            alert.addButton(withTitle: "OK")
+            onFirstButton = { openURL(UpdateCheck.siteURL) }
         case .askToEnable:
             alert.messageText = "Check for updates automatically?"
             alert.informativeText = "Markdown Editor can ask markdown.chri5tian.com once a day whether a newer version exists. Like any web request, the site sees your IP address; nothing else is sent. You can change this in the Markdown Editor menu."

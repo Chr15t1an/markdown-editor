@@ -129,6 +129,8 @@ jobs:
 
       - name: Build and package
         if: steps.guard.outputs.mode == 'build'
+        env:
+          MARKDOWN_EDITOR_UPDATE_KEY: ${{ secrets.MARKDOWN_EDITOR_UPDATE_KEY }}   # signs version.json (scripts/update-key.sh)
         run: scripts/package-release.sh
 
       - name: Package the draft's saved zip (no build)
@@ -136,11 +138,12 @@ jobs:
         env:
           VERSION: ${{ steps.version.outputs.version }}
           GH_TOKEN: ${{ github.token }}
+          UPDATE_KEY: ${{ secrets.MARKDOWN_EDITOR_UPDATE_KEY }}
         run: |
           mkdir -p build/draft
           gh release download "v$VERSION" --dir build/draft \
             --pattern "Markdown-Editor-$VERSION.zip" --pattern "Markdown-Editor-$VERSION.zip.sha256"
-          RELEASE_ZIP="build/draft/Markdown-Editor-$VERSION.zip" scripts/package-release.sh
+          RELEASE_ZIP="build/draft/Markdown-Editor-$VERSION.zip" MARKDOWN_EDITOR_UPDATE_KEY="$UPDATE_KEY" scripts/package-release.sh
 
       - name: Site tarball
         id: package

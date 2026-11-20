@@ -59,6 +59,24 @@ Release, unpack it, and deploy that folder as in the Notes' rollback step
 count at a higher rate); with no payment method on file, usage stops at the quota instead of being
 billed. Once the repo is public, standard runners are free.
 
+## Update signing key (once per Mac)
+
+`version.json` carries an Ed25519 signature over the release's version and SHA-256; installed apps
+(0.7.0+) check it against `MEUpdatePublicKey` in their Info.plist before **Install and Relaunch**
+replaces them. `scripts/package-release.sh` signs with the key in the login keychain (service
+`markdown-editor-update-key`) or `$MARKDOWN_EDITOR_UPDATE_KEY` (the CI secret of the same name), checks
+the signature against `Resources/Info.plist`, and stops if there is no key (override:
+`MARKDOWN_EDITOR_UNSIGNED_FEED=1`, which ships a feed apps can only Download from).
+
+- The key was made with `scripts/update-key.sh create` (2026-11-20). `scripts/update-key.sh check`
+  confirms the stored key matches Info.plist. Never run `create` again unless the key is lost.
+- **Another Mac or CI:** copy the base64 string (`security find-generic-password -s
+  markdown-editor-update-key -a release -w`, straight into the destination, never a chat or file)
+  into that Mac's keychain or the `MARKDOWN_EDITOR_UPDATE_KEY` repo secret.
+- **Lost key:** delete the keychain item, run `create`, release. Apps already installed will refuse
+  the new signature and offer Download; once users install that release by hand, in-app updates work
+  again.
+
 ## 1. Bump the version and write the changelog
 
 On the branch that carries the release, set the new version (replace `X.Y.Z`; the build number goes

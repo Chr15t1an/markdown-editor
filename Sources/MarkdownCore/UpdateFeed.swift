@@ -1,14 +1,58 @@
+import CryptoKit
 import Foundation
 
 /// The site's update feed, `https://markdown.chri5tian.com/version.json`, rendered per release by
-/// `scripts/package-release.sh` from `site/version.template.json`: `{"version": "0.3.2", "url": "…"}`.
+/// `scripts/package-release.sh` from `site/version.template.json`:
+/// `{"version": "0.7.0", "url": "…", "zip": "Markdown-Editor-0.7.0.zip", "sha256": "…", "signature": "…"}`.
+/// `zip`, `sha256` and `signature` (0.7.0 and later) let the app install the update itself; older
+/// apps ignore them and only read `version` and `url`.
 public struct UpdateFeed: Decodable, Equatable, Sendable {
     public let version: String
     public let url: URL
+    public let zip: String?
+    public let sha256: String?
+    public let signature: String?
 
-    public init(version: String, url: URL) {
+    public init(version: String, url: URL, zip: String? = nil, sha256: String? = nil, signature: String? = nil) {
         self.version = version
         self.url = url
+        self.zip = zip
+        self.sha256 = sha256
+        self.signature = signature
+    }
+}
+
+/// A release the app may download and install: the zip's address, the SHA-256 its bytes must have,
+/// and the version the app inside must report. Only made by `UpdateCheck.package(for:feedURL:publicKey:)`,
+/// after the feed's Ed25519 signature over (version, sha256) checks out.
+public struct UpdatePackage: Equatable, Sendable {
+    public let version: String
+    public let zipURL: URL
+    public let sha256: String
+}
+
+/// The release signature: Ed25519 over `markdown-editor-update:v1:<version>:<sha256>`. The private key
+/// lives only with whoever cuts releases (`scripts/update-key.sh`); the public key ships in the app's
+/// Info.plist (`MEUpdatePublicKey`). The signature binds the version to the exact zip bytes, so a
+/// tampered feed or zip — even one served from the real site — is refused, and an old signed
+/// release can't be replayed as an "update" because the version must also be newer.
+public enum UpdateSignature {
+    public static func message(version: String, sha256: String) -> Data {
+        Data("markdown-editor-update:v1:\(version):\(sha256.lowercased())".utf8)
+    }
+
+    public static func isValid(signature: String, version: String, sha256: String, publicKey: String) -> Bool {
+        guard let keyData = Data(base64Encoded: publicKey),
+              let key = try? Curve25519.Signing.PublicKey(rawRepresentation: keyData),
+              let sig = Data(base64Encoded: signature) else { return false }
+        return key.isValidSignature(sig, for: message(version: version, sha256: sha256))
+    }
+
+    /// Base64 signature (used by the release tooling; the app only verifies).
+    public static func sign(version: String, sha256: String, privateKey: String) throws -> String {
+        guard let keyData = Data(base64Encoded: privateKey) else { throw CryptoKitError.incorrectKeySize }
+        let key = try Curve25519.Signing.PrivateKey(rawRepresentation: keyData)
+        return try key.signature(for: message(version: version, sha256: sha256)).base64EncodedString()
     }
 }
 
@@ -59,6 +103,30 @@ public enum UpdateCheck {
         case "http": return url.host == "127.0.0.1" && url.port != nil
         default: return false
         }
+    }
+
+    /// The installable release behind a feed, or nil (then the app falls back to **Download**). All of:
+    /// the version is plain `x.y.z`; `zip` is exactly `Markdown-Editor-<version>.zip`; `sha256` is 64
+    /// hex digits; the signature verifies with `publicKey`. The zip is fetched from the feed's own
+    /// folder, so it inherits the feed URL's https-or-local-test rule.
+    public static func package(for feed: UpdateFeed, feedURL: URL, publicKey: String?) -> UpdatePackage? {
+        guard let publicKey, let zip = feed.zip, let sha = feed.sha256?.lowercased(), let signature = feed.signature,
+              isAllowedFeedURL(feedURL), numericParts(feed.version) != nil,
+              zip == "Markdown-Editor-\(feed.version).zip",
+              sha.count == 64, sha.allSatisfy({ $0.isHexDigit && $0.isASCII }),
+              UpdateSignature.isValid(signature: signature, version: feed.version, sha256: sha, publicKey: publicKey)
+        else { return nil }
+        let zipURL = feedURL.deletingLastPathComponent().appendingPathComponent(zip)
+        return UpdatePackage(version: feed.version, zipURL: zipURL, sha256: sha)
+    }
+
+    /// Lowercase hex SHA-256 of a file, read in 1 MB chunks.
+    public static func sha256(ofFile url: URL) throws -> String {
+        let handle = try FileHandle(forReadingFrom: url)
+        defer { try? handle.close() }
+        var hasher = SHA256()
+        while let chunk = try handle.read(upToCount: 1 << 20), !chunk.isEmpty { hasher.update(data: chunk) }
+        return hasher.finalize().map { String(format: "%02x", $0) }.joined()
     }
 
     static func isSiteURL(_ url: URL) -> Bool {
