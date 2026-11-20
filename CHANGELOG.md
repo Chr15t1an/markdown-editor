@@ -8,6 +8,19 @@ uses the section verbatim as the GitHub Release notes, and the release-note post
 Heading format: `## X.Y.Z — YYYY-MM-DD` (the version must match `scripts/check-version.sh`).
 `## Unreleased` collects changes until the next release, when it is renamed to `## X.Y.Z — YYYY-MM-DD`.
 
+## 0.7.0 — 2026-11-20
+
+Updates install themselves: Check for Updates offers Install and Relaunch instead of a trip to the website.
+
+- When a newer version exists, **Install and Relaunch** saves your note, downloads the release,
+  verifies it, swaps it in place of the running app and reopens it. Nothing to paste into Terminal.
+- The release is checked before anything is replaced: an Ed25519 signature over its version and
+  SHA-256 (the public key ships in the app), the zip's SHA-256, and the new app's code signature,
+  bundle id and version. Any failure leaves the current copy as it was and offers **Download**.
+- A copy that can't replace itself (still in Downloads under macOS App Translocation, or in a folder
+  you can't write to) keeps the old **Download** button.
+- This version is the last one to install by hand; from here on, updates arrive in the app.
+
 ## 0.6.0 — 2026-11-19
 
 Task lists show checkboxes you can tick, and the File menu gains Save As… and Move To….
