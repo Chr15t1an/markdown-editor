@@ -438,4 +438,35 @@ final class WindowTests: XCTestCase {
         XCTAssertEqual(a.session.currentURL?.path, other.appendingPathComponent("o.md").standardizedFileURL.path)
         XCTAssertEqual(try read(other.appendingPathComponent("o.md")), "o\n")
     }
+
+    // MARK: Phase 4 — the probe sees every window
+
+    func testProbeStateListsEveryWindow() throws {
+        let a = window()
+        a.open(dir)
+        let b = window()
+        b.open(other)
+        let file = dir.appendingPathComponent("probe.json")
+        let probe = ProbeLog(path: file.path)
+        probe.allWindows = { [unowned self] in registry.controllers }
+        probe.window = b
+        probe.dump()
+        let state = try XCTUnwrap(JSONSerialization.jsonObject(with: Data(contentsOf: file)) as? [String: Any])
+        let windows = try XCTUnwrap(state["windows"] as? [[String: Any]])
+        XCTAssertEqual(windows.count, 2)
+        XCTAssertEqual(windows[0]["folder"] as? String, dir.standardizedFileURL.path)
+        XCTAssertEqual(windows[1]["folder"] as? String, other.standardizedFileURL.path)
+        XCTAssertEqual(state["folder"] as? String, other.standardizedFileURL.path, "top level = the target window")
+        XCTAssertEqual(state["target"] as? Int, 2)
+        XCTAssertEqual(state["pid"] as? Int, Int(ProcessInfo.processInfo.processIdentifier))
+        XCTAssertEqual(state["defaultFolder"] as? String, "")
+        // `window 1` retargets; `dump <path>` writes to that path.
+        probe.run("window 1")
+        let snap = dir.appendingPathComponent("snap.json")
+        probe.run("dump \(snap.path)")
+        let snapState = try XCTUnwrap(JSONSerialization.jsonObject(with: Data(contentsOf: snap)) as? [String: Any])
+        XCTAssertEqual(snapState["target"] as? Int, 1)
+        XCTAssertEqual(snapState["folder"] as? String, dir.standardizedFileURL.path)
+        XCTAssertEqual(probe.run("quit"), .quit)
+    }
 }

@@ -8,14 +8,22 @@
 # every rebuild. The build is never blocked on this. MARKDOWN_EDITOR_SIGN_ADHOC=1 forces ad-hoc
 # signing without the note below (scripts/package-release.sh uses it for public releases).
 #
+# Test copies (scripts/verify-outcome.sh):
+#   MARKDOWN_EDITOR_BUNDLE_ID   bundle id of the copy (default com.chri5tian.markdown-editor); when it
+#                               differs, the copied Info.plist's CFBundleIdentifier is rewritten, so the
+#                               copy has its own defaults domain. `--install` refuses an overridden id.
+#   MARKDOWN_EDITOR_BUILD_DIR   folder the .app is written to (default build). The intermediate
+#                               build/swiftc/ still lands in the repo (git-ignored).
+#
 set -euo pipefail
 
 cd "$(dirname "${BASH_SOURCE[0]}")/.."
 
 NAME="Markdown Editor"
 EXE="MarkdownEditor"
-APP="build/$NAME.app"
-BUNDLE_ID="com.chri5tian.markdown-editor"
+DEFAULT_BUNDLE_ID="com.chri5tian.markdown-editor"
+APP="${MARKDOWN_EDITOR_BUILD_DIR:-build}/$NAME.app"
+BUNDLE_ID="${MARKDOWN_EDITOR_BUNDLE_ID:-$DEFAULT_BUNDLE_ID}"
 IDENTITY="${MARKDOWN_EDITOR_SIGN_IDENTITY:-Markdown Editor Dev}"
 LSREGISTER=/System/Library/Frameworks/CoreServices.framework/Frameworks/LaunchServices.framework/Support/lsregister
 
@@ -26,6 +34,10 @@ for arg in "$@"; do
     *) echo "usage: $0 [--install]" >&2; exit 2 ;;
   esac
 done
+if [[ "$INSTALL" == 1 && "$BUNDLE_ID" != "$DEFAULT_BUNDLE_ID" ]]; then
+  echo "refusing to install a re-identified copy" >&2
+  exit 2
+fi
 
 # xcode-select points at the Command Line Tools on this Mac; Xcode's toolchain is needed for XCTest
 # and builds much faster. Override per command instead of changing the system setting.
@@ -66,6 +78,9 @@ rm -rf "$APP"
 mkdir -p "$APP/Contents/MacOS" "$APP/Contents/Resources"
 cp "$BIN_DIR/$EXE" "$APP/Contents/MacOS/$EXE"
 cp Resources/Info.plist "$APP/Contents/Info.plist"
+if [[ "$BUNDLE_ID" != "$DEFAULT_BUNDLE_ID" ]]; then
+  /usr/libexec/PlistBuddy -c "Set :CFBundleIdentifier $BUNDLE_ID" "$APP/Contents/Info.plist"
+fi
 # App icon: built from brand/app-icon.svg (see brand/README.md); CFBundleIconFile = AppIcon.
 cp Resources/AppIcon.icns "$APP/Contents/Resources/AppIcon.icns"
 
@@ -107,6 +122,8 @@ if [[ "$INSTALL" == 1 ]]; then
   "$LSREGISTER" -u "$PWD/$APP" >/dev/null 2>&1 || true
   "$LSREGISTER" -f "$DEST" || true
   echo "$DEST"
+elif [[ "$APP" == /* ]]; then
+  echo "$APP"
 else
   echo "$PWD/$APP"
 fi

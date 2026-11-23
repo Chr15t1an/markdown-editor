@@ -23,6 +23,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, EditorMenuActions, Win
 
     func applicationDidFinishLaunching(_ notification: Notification) {
         didFinishLaunching = true
+        ProbeLog.shared.allWindows = { [weak self] in self?.windows.controllers ?? [] }
         windows.launch(pending: pendingURLs)
         pendingURLs = []
         ProbeLog.shared.start()

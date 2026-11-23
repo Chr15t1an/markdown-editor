@@ -580,6 +580,7 @@ final class MainWindowController: NSWindowController, NSWindowDelegate, Document
         let sel = tv.selectedRange()
         return [
             "title": window?.title ?? "",
+            "visible": window?.isVisible ?? false,
             "subtitle": window?.subtitle ?? "",
             "folder": folder?.path ?? "",
             "file": session.currentURL?.path ?? "",
@@ -622,7 +623,9 @@ final class MainWindowController: NSWindowController, NSWindowDelegate, Document
             // which a probe-launched (inactive) app does not have. App-level actions (newDocument:)
             // live on the app delegate, past that chain: fall back to NSApp's own dispatch.
             let action = Selector(String(bits[0]))
-            if window?.firstResponder?.tryToPerform(action, with: sender) != true {
+            // The controller's own actions (newDocument:, toggleDefaultFolder:) are tried directly too,
+            // so the probe does not depend on the chain passing through it.
+            if window?.firstResponder?.tryToPerform(action, with: sender) != true, !tryToPerform(action, with: sender) {
                 NSApp.sendAction(action, to: nil, from: sender)
             }
         case "row":
