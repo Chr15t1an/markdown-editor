@@ -52,8 +52,8 @@ enum MainMenu {
 
     static func fileMenu() -> NSMenu {
         let menu = NSMenu(title: "File")
-        menu.addItem(item("New", #selector(EditorMenuActions.newDocument(_:)), "n"))
-        menu.addItem(item("Open…", #selector(EditorMenuActions.openDocument(_:)), "o"))
+        menu.addItem(item("New", #selector(WindowFileActions.newDocument(_:)), "n"))
+        menu.addItem(item("Open…", #selector(WindowFileActions.openDocument(_:)), "o"))
         let recent = NSMenuItem(title: "Open Recent", action: nil, keyEquivalent: "")
         let recentMenu = NSMenu(title: "Open Recent")
         recentMenu.addItem(item("Clear Menu", #selector(NSDocumentController.clearRecentDocuments(_:))))
@@ -62,7 +62,7 @@ enum MainMenu {
         menu.addItem(recent)
         menu.addItem(.separator())
         menu.addItem(item("Close Window", #selector(NSWindow.performClose(_:)), "w"))
-        menu.addItem(item("Save", #selector(EditorMenuActions.saveDocument(_:)), "s"))
+        menu.addItem(item("Save", #selector(WindowFileActions.saveDocument(_:)), "s"))
         menu.addItem(item("Save As…", #selector(DocumentFileActions.saveDocumentAs(_:)), "s", [.command, .shift]))
         menu.addItem(item("Move To…", #selector(DocumentFileActions.moveDocument(_:))))
         return menu

@@ -1,19 +1,15 @@
 import AppKit
 import MarkdownCore
-import UniformTypeIdentifiers
 
-/// Menu actions with no AppKit declaration, so `#selector` can name them.
+/// App-level menu actions with no AppKit declaration, so `#selector` can name them.
 @MainActor @objc protocol EditorMenuActions {
-    func newDocument(_ sender: Any?)
-    func openDocument(_ sender: Any?)
-    func saveDocument(_ sender: Any?)
     func checkForUpdates(_ sender: Any?)
     func toggleAutomaticUpdateChecks(_ sender: Any?)
 }
 
 @MainActor
-final class AppDelegate: NSObject, NSApplicationDelegate, EditorMenuActions, NSMenuItemValidation {
-    private var windowController: MainWindowController?
+final class AppDelegate: NSObject, NSApplicationDelegate, EditorMenuActions, WindowFileActions, NSMenuItemValidation {
+    let windows = WindowRegistry()
     private var updateChecker: UpdateChecker?
     /// URLs delivered by Launch Services before the window exists.
     private var pendingURLs: [URL] = []
@@ -25,14 +21,12 @@ final class AppDelegate: NSObject, NSApplicationDelegate, EditorMenuActions, NSM
     }
 
     func applicationDidFinishLaunching(_ notification: Notification) {
-        let controller = MainWindowController()
-        windowController = controller
-        controller.showWindow(nil)
+        let controller = windows.makeWindow()
         didFinishLaunching = true
         if pendingURLs.isEmpty {
             controller.restoreLastSession()
         } else {
-            pendingURLs.forEach { controller.open($0) }
+            pendingURLs.forEach { windows.open($0, from: controller) }
             pendingURLs = []
         }
         ProbeLog.shared.start()
@@ -46,7 +40,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, EditorMenuActions, NSM
         let checker = UpdateChecker(feedURL: UpdateChecker.resolveFeedURL(),
                                     currentVersion: UpdateChecker.bundleVersion())
         var alerts = UpdateAlerts(
-            window: { [weak self] in self?.windowController?.window },
+            window: { [weak self] in self?.windows.target?.window },
             openURL: { NSWorkspace.shared.open($0) },
             answer: { [weak checker] enabled in
                 guard let checker else { return }
@@ -71,7 +65,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, EditorMenuActions, NSM
             let installer = UpdateInstaller()
             do {
                 let staged = try await installer.prepare(package)
-                guard windowController?.prepareToClose() ?? true else { installer.discard(staged); return }
+                guard windows.prepareAllToClose() else { installer.discard(staged); return }
                 try installer.installAndScheduleRelaunch(staged)
                 NSApp.terminate(nil)
             } catch {
@@ -82,42 +76,35 @@ final class AppDelegate: NSObject, NSApplicationDelegate, EditorMenuActions, NSM
 
     /// Dock-icon drop, Finder "Open With", `open -a "Markdown Editor" <path>`, Open Recent.
     func application(_ application: NSApplication, open urls: [URL]) {
-        guard didFinishLaunching, let controller = windowController else {
+        guard didFinishLaunching else {
             pendingURLs.append(contentsOf: urls)
             return
         }
-        for url in urls { controller.open(url) }
-        controller.window?.makeKeyAndOrderFront(nil)
+        for url in urls { windows.open(url) }   // the registry brings the chosen window forward
     }
 
     func applicationShouldOpenUntitledFile(_ sender: NSApplication) -> Bool { false }
     func applicationShouldTerminateAfterLastWindowClosed(_ sender: NSApplication) -> Bool { true }
-    /// Quitting never drops edits silently: if the note can't be saved the user must choose.
+    /// Quitting never drops edits silently: if a note can't be saved the user must choose, per window.
     func applicationShouldTerminate(_ sender: NSApplication) -> NSApplication.TerminateReply {
-        (windowController?.prepareToClose() ?? true) ? .terminateNow : .terminateCancel
+        windows.prepareAllToClose() ? .terminateNow : .terminateCancel
     }
 
-    func applicationWillTerminate(_ notification: Notification) { windowController?.save() }
-    func applicationWillResignActive(_ notification: Notification) { windowController?.save() }
+    func applicationWillTerminate(_ notification: Notification) { windows.saveAll() }
+    func applicationWillResignActive(_ notification: Notification) { windows.saveAll() }
 
     // MARK: Menu actions
 
-    /// File › New (⌘N): a new empty note — see `MainWindowController.newNote()`.
-    @objc func newDocument(_ sender: Any?) { windowController?.newNote() }
+    // New / Open… / Save normally reach the key window's MainWindowController; these answer only
+    // when no window is key (an inactive, probe-launched app) and act on the target window.
+    @objc func newDocument(_ sender: Any?) { (windows.target ?? windows.makeWindow()).newNote() }
 
     @objc func openDocument(_ sender: Any?) {
-        let panel = NSOpenPanel()
-        panel.canChooseDirectories = true
-        panel.canChooseFiles = true
-        panel.allowsMultipleSelection = false
-        panel.allowedContentTypes = [.folder]
-            + FolderTree.markdownExtensions.union(ImageFile.extensions).compactMap { UTType(filenameExtension: $0) }
-        panel.prompt = "Open"
-        guard panel.runModal() == .OK, let url = panel.url else { return }
-        windowController?.open(url)
+        guard let url = MainWindowController.runOpenPanel() else { return }
+        windows.open(url)
     }
 
-    @objc func saveDocument(_ sender: Any?) { windowController?.save() }
+    @objc func saveDocument(_ sender: Any?) { windows.target?.save() }
 
     /// App menu › Check for Updates…: always fetches and always reports.
     @objc func checkForUpdates(_ sender: Any?) {
@@ -142,7 +129,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, EditorMenuActions, NSM
         return true
     }
 
-    func open(_ url: URL) { windowController?.open(url) }
+    func open(_ url: URL) { windows.open(url) }
 }
 
 /// Routes File › Open Recent to the main window (there are no NSDocument subclasses).

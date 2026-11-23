@@ -9,8 +9,17 @@ import UniformTypeIdentifiers
     func moveDocument(_ sender: Any?)
 }
 
-/// The one main window: sidebar folder tree + editor, and every "open this" path.
-final class MainWindowController: NSWindowController, NSWindowDelegate, DocumentFileActions, NSMenuItemValidation {
+/// File › New, Open… and Save, answered by the window they are chosen in (the app delegate keeps
+/// the same selectors as a fallback for when no window is key).
+@MainActor @objc protocol WindowFileActions {
+    func newDocument(_ sender: Any?)
+    func openDocument(_ sender: Any?)
+    func saveDocument(_ sender: Any?)
+}
+
+/// A main window: sidebar folder tree + editor, and every "open this" path.
+final class MainWindowController: NSWindowController, NSWindowDelegate, DocumentFileActions, WindowFileActions,
+                                  NSMenuItemValidation {
     static let lastFolderKey = "lastFolder"
     static let lastFileKey = "lastFile"
 
@@ -24,8 +33,15 @@ final class MainWindowController: NSWindowController, NSWindowDelegate, Document
     /// Its modification date when shown: an FSEvents batch reloads it only when this moved.
     private var viewedImageDate: Date?
 
-    /// The app's one theme, handed to every view that draws with it.
+    /// The window's theme, handed to every view that draws with it.
     let theme: Theme
+
+    /// The app's window list (nil for a controller built on its own, as tests do).
+    weak var registry: WindowRegistry?
+    /// The window closed; the registry drops it (called on the next run-loop turn).
+    var onClose: ((MainWindowController) -> Void)?
+    /// The window became key.
+    var onBecomeKey: ((MainWindowController) -> Void)?
 
     /// Picks the Save As file (an NSSavePanel); nil = cancelled. Replaceable in tests.
     var chooseSaveAsURL: @MainActor (URL) -> URL? = { MainWindowController.runSaveAsPanel(for: $0) }
@@ -46,6 +62,7 @@ final class MainWindowController: NSWindowController, NSWindowDelegate, Document
         window.title = "Markdown Editor"
         window.isRestorable = false
         window.tabbingMode = .disallowed
+        window.isReleasedWhenClosed = false   // the registry owns the lifetime
         super.init(window: window)
         window.delegate = self
         editor.styler.theme = theme
@@ -280,6 +297,32 @@ final class MainWindowController: NSWindowController, NSWindowDelegate, Document
         alert.beginSheetModal(for: window)
     }
 
+    // MARK: New / Open… / Save (per window)
+
+    /// File › New (⌘N): a new empty note — see `newNote()`.
+    @objc func newDocument(_ sender: Any?) { newNote() }
+
+    /// File › Open…: the choice goes through the registry's routing, with this window as the target.
+    @objc func openDocument(_ sender: Any?) {
+        guard let url = Self.runOpenPanel() else { return }
+        if let registry { registry.open(url, from: self) } else { open(url) }
+    }
+
+    @objc func saveDocument(_ sender: Any?) { save() }
+
+    /// The Open… panel (folders, markdown and images), app-modal. Nil = cancelled.
+    static func runOpenPanel() -> URL? {
+        let panel = NSOpenPanel()
+        panel.canChooseDirectories = true
+        panel.canChooseFiles = true
+        panel.allowsMultipleSelection = false
+        panel.allowedContentTypes = [.folder]
+            + FolderTree.markdownExtensions.union(ImageFile.extensions).compactMap { UTType(filenameExtension: $0) }
+        panel.prompt = "Open"
+        guard panel.runModal() == .OK, let url = panel.url else { return nil }
+        return url
+    }
+
     // MARK: Save As / Move To
 
     @objc func saveDocumentAs(_ sender: Any?) {
@@ -470,8 +513,15 @@ final class MainWindowController: NSWindowController, NSWindowDelegate, Document
     // MARK: NSWindowDelegate
 
     func windowShouldClose(_ sender: NSWindow) -> Bool { prepareToClose() }
-    func windowWillClose(_ notification: Notification) { session.save() }
+    /// `windowShouldClose` already saved or the user discarded: save once more, then stop presenting
+    /// the note, so another window can open it (two presenters on one file deadlock).
+    func windowWillClose(_ notification: Notification) {
+        session.endForClosedWindow()
+        // Removal on the next turn: the registry never drops the last reference inside this callback.
+        DispatchQueue.main.async { [self] in onClose?(self) }
+    }
     func windowDidResignKey(_ notification: Notification) { session.save() }
+    func windowDidBecomeKey(_ notification: Notification) { onBecomeKey?(self) }
 
     // MARK: Probe hook
 
