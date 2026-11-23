@@ -8,6 +8,20 @@ uses the section verbatim as the GitHub Release notes, and the release-note post
 Heading format: `## X.Y.Z — YYYY-MM-DD` (the version must match `scripts/check-version.sh`).
 `## Unreleased` collects changes until the next release, when it is renamed to `## X.Y.Z — YYYY-MM-DD`.
 
+## Unreleased
+
+Several windows at once, and a default notes folder that new windows and plain launches open.
+
+- File › New Window (⇧⌘N) opens another window; windows cascade from the one in front.
+- File › Use as Default Folder makes the window’s folder the default (a checkmark; choose it again
+  to clear it). New windows open it, and a plain launch opens it instead of the last folder —
+  reopening the last note only when it is inside it. With no default, launch works as before.
+- New, Open… and Save act on the window you are in.
+- A note is open in one window at a time: opening it in another window brings the window that has
+  it forward, and Save As or Move To onto it is refused.
+- Quitting, installing an update and switching apps save every window; a note that can't be saved
+  still asks Keep Editing / Discard Changes, window by window.
+
 ## 0.7.0 — 2026-11-20
 
 Updates install themselves: Check for Updates offers Install and Relaunch instead of a trip to the website.

@@ -9,6 +9,8 @@ Typora is the right shape for editing markdown — one pane, WYSIWYG, open any f
 - Typora-style inline editing: markdown syntax renders in place while you type, no preview toggle —
   including GitHub-style pipe tables.
 - Drag a folder onto the window or the Dock icon and it opens to that folder, with a sidebar file tree.
+- Several windows side by side (File › New Window, ⇧⌘N), and a default notes folder that new
+  windows and plain launches open.
 - Images in the folder (PNG, JPEG, GIF, HEIC/HEIF, WebP, TIFF, BMP, AVIF) are listed in the sidebar beside the notes and open read-only, fitted to the window, with pinch to zoom. Finder's Open With lists the app for those formats without replacing Preview.
 
 Anything beyond that (themes, export, plugins, editing images) is out of scope until it's actually missed.
@@ -78,8 +80,11 @@ viewing) into a folder you choose and keeps it open — if that folder already h
 name, nothing moves.
 
 Opening a single `.md` file selects it in place when it is inside the folder already open;
-a file from anywhere else opens its own folder with that file selected. The last folder and file
-reopen at launch. Files save automatically a second after you stop typing, when you switch files,
+a file from anywhere else opens its own folder with that file selected. File › New Window (⇧⌘N)
+opens another window. File › Use as Default Folder makes the window’s folder the one new windows
+and plain launches open (choose it again to clear it); with no default, the last folder and file
+reopen at launch. A note is open in one window at a time: opening it elsewhere brings its window
+forward. Files save automatically a second after you stop typing, when you switch files,
 and when the window closes or the app quits; ⌘S saves now. There is no "unsaved changes" prompt
 while saves succeed. If a save fails (read-only file, disk full), the text stays in the editor, the
 title bar says "Not saved", and switching away or quitting asks Keep Editing / Discard Changes.

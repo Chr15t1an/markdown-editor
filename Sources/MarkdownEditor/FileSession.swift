@@ -116,6 +116,12 @@ final class FileSession: NSObject, NSFilePresenter, @unchecked Sendable {
         return true
     }
 
+    /// The window closed: save (never prompts — closing already asked) and stop presenting the file.
+    @MainActor func endForClosedWindow() {
+        save()
+        forget()
+    }
+
     @MainActor private func forget() {
         detach()
         setURL(nil)

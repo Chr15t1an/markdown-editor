@@ -453,6 +453,8 @@ of an open note is left to the text view.
 `name — W × H` in pixels), or
 "File.md — Not saved: reason" while a save is failing. No toolbar. Close with unsaved
 *unsaveable* edits: the Keep Editing / Discard Changes sheet; saves that succeed never prompt.
+Several windows: each its own folder; a note is open in one window at a time — opening it in
+another brings the window that has it forward. New windows cascade from the front window.
 
 **Empty state** — centred `ui-empty-state` text in the editor pane: "Drop a folder here" at
 launch with nothing restored, "Select a file" when a folder is open and no file is, "“Name” was
@@ -462,9 +464,11 @@ to decode. One sentence, no button; the action
 is the drag or the sidebar.
 
 **Alerts** — `NSAlert` sheets only: open failure ("Couldn’t open “X”"), create failure
-("Couldn’t create a new note in “X”"), Save As failure ("Couldn’t save “X”"), Move To failure
+("Couldn’t create a new note in “X”"), Save As failure ("Couldn’t save “X”" — onto a note open in
+another window: "“X” is open in another window."), Move To failure
 ("Couldn’t move “X”" — when the folder already has a file of that name: "A file named “X” is already
-in “Folder”. Nothing was moved."), save failure ("Your changes couldn’t be saved", with the
+in “Folder”. Nothing was moved."; onto a note open in another window: "“X” is open in another
+window. Nothing was moved."), save failure ("Your changes couldn’t be saved", with the
 reason and what happens next), and the critical Keep Editing / Discard Changes choice. The
 update check (`UpdateChecker.swift`) adds four: "Markdown Editor X.Y.Z is available"
 (**Install and Relaunch** for a signed release this copy can replace, else **Download** / **Skip This Version**: the automatic check shows each version once), "You’re up to date" (**OK**), "Couldn’t check for updates"
@@ -473,7 +477,9 @@ update check (`UpdateChecker.swift`) adds four: "Markdown Editor X.Y.Z is availa
 automatic notice waits for the next check. Titles say what happened; body says why and what to do.
 
 **Menus** — the standard App / File / Edit / Format / View / Window menus built in code; Format
-holds the markdown actions with their ⌘ shortcuts. File adds **Save As…** (⇧⌘S) and **Move To…**
+holds the markdown actions with their ⌘ shortcuts. File adds **New Window** (⇧⌘N) under New, and
+**Use as Default Folder** after Open Recent (a checkmark item, on when the window’s folder is the
+default; disabled with no folder open). File adds **Save As…** (⇧⌘S) and **Move To…**
 under Save: Save As writes the note to a new file and keeps editing it, Move To moves the note — or
 the image on screen — into a chosen folder and keeps it open; both are disabled when nothing they
 apply to is open, and use AppKit’s own save/open panels. The App menu adds **Check for Updates…** and

@@ -7,10 +7,20 @@ import UniformTypeIdentifiers
 @MainActor @objc protocol DocumentFileActions {
     func saveDocumentAs(_ sender: Any?)
     func moveDocument(_ sender: Any?)
+    func toggleDefaultFolder(_ sender: Any?)
 }
 
-/// The one main window: sidebar folder tree + editor, and every "open this" path.
-final class MainWindowController: NSWindowController, NSWindowDelegate, DocumentFileActions, NSMenuItemValidation {
+/// File › New, Open… and Save, answered by the window they are chosen in (the app delegate keeps
+/// the same selectors as a fallback for when no window is key).
+@MainActor @objc protocol WindowFileActions {
+    func newDocument(_ sender: Any?)
+    func openDocument(_ sender: Any?)
+    func saveDocument(_ sender: Any?)
+}
+
+/// A main window: sidebar folder tree + editor, and every "open this" path.
+final class MainWindowController: NSWindowController, NSWindowDelegate, DocumentFileActions, WindowFileActions,
+                                  NSMenuItemValidation {
     static let lastFolderKey = "lastFolder"
     static let lastFileKey = "lastFile"
 
@@ -24,8 +34,15 @@ final class MainWindowController: NSWindowController, NSWindowDelegate, Document
     /// Its modification date when shown: an FSEvents batch reloads it only when this moved.
     private var viewedImageDate: Date?
 
-    /// The app's one theme, handed to every view that draws with it.
+    /// The window's theme, handed to every view that draws with it.
     let theme: Theme
+
+    /// The app's window list (nil for a controller built on its own, as tests do).
+    weak var registry: WindowRegistry?
+    /// The window closed; the registry drops it (called on the next run-loop turn).
+    var onClose: ((MainWindowController) -> Void)?
+    /// The window became key.
+    var onBecomeKey: ((MainWindowController) -> Void)?
 
     /// Picks the Save As file (an NSSavePanel); nil = cancelled. Replaceable in tests.
     var chooseSaveAsURL: @MainActor (URL) -> URL? = { MainWindowController.runSaveAsPanel(for: $0) }
@@ -37,8 +54,12 @@ final class MainWindowController: NSWindowController, NSWindowDelegate, Document
         alert.beginSheetModal(for: window)
     }
 
-    init(theme: Theme = Theme()) {
+    /// False for every window but the one that owns the "MainWindow" / "MainSplit" autosave names.
+    let autosavesFrame: Bool
+
+    init(theme: Theme = Theme(), autosavesFrame: Bool = true) {
         self.theme = theme
+        self.autosavesFrame = autosavesFrame
         let window = NSWindow(
             contentRect: NSRect(origin: .zero, size: theme.defaultWindowSize),
             styleMask: [.titled, .closable, .miniaturizable, .resizable, .fullSizeContentView],
@@ -46,6 +67,7 @@ final class MainWindowController: NSWindowController, NSWindowDelegate, Document
         window.title = "Markdown Editor"
         window.isRestorable = false
         window.tabbingMode = .disallowed
+        window.isReleasedWhenClosed = false   // the registry owns the lifetime
         super.init(window: window)
         window.delegate = self
         editor.styler.theme = theme
@@ -59,7 +81,7 @@ final class MainWindowController: NSWindowController, NSWindowDelegate, Document
         editorItem.minimumThickness = theme.editorMinWidth
         splitViewController.addSplitViewItem(sidebarItem)
         splitViewController.addSplitViewItem(editorItem)
-        splitViewController.splitView.autosaveName = "MainSplit"
+        if autosavesFrame { splitViewController.splitView.autosaveName = "MainSplit" }
 
         let drop = DropView(frame: NSRect(origin: .zero, size: theme.defaultWindowSize))
         drop.theme = theme
@@ -74,7 +96,7 @@ final class MainWindowController: NSWindowController, NSWindowDelegate, Document
         window.contentViewController = root
         window.setContentSize(theme.defaultWindowSize)
         window.center()
-        window.setFrameAutosaveName("MainWindow")
+        if autosavesFrame { window.setFrameAutosaveName("MainWindow") }
 
         editor.onOpen = { [weak self] url in self?.open(url) }
         sidebar.onSelectFile = { [weak self] url in
@@ -117,6 +139,7 @@ final class MainWindowController: NSWindowController, NSWindowDelegate, Document
     @discardableResult
     func open(_ url: URL) -> Bool {
         guard let target = OpenTarget.resolve(url) else { return false }
+        if let file = target.file, handedToOtherWindow(file) { return false }   // before any re-root
         if let file = target.file, let root = folder, file.path.hasPrefix(root.path + "/") {
             sidebar.reveal(file)
             openFile(file)
@@ -153,6 +176,7 @@ final class MainWindowController: NSWindowController, NSWindowDelegate, Document
 
     @discardableResult
     private func openFile(_ url: URL, focusEditor: Bool = true) -> Bool {
+        if handedToOtherWindow(url) { return false }
         if ImageFile.isImage(url) { return showImage(url) }
         guard session.open(url) else {
             sidebar.selectFile(session.currentURL ?? viewedImage)   // put the selection back on what is shown
@@ -164,6 +188,15 @@ final class MainWindowController: NSWindowController, NSWindowDelegate, Document
         UserDefaults.standard.set(url.standardizedFileURL.path, forKey: Self.lastFileKey)
         if focusEditor { editor.focus() }   // false only for plain-key navigation in the sidebar (decision 39)
         ProbeLog.shared.dump()
+        return true
+    }
+
+    /// A note open in another window is never opened here too (two presenters on one file deadlock):
+    /// that window comes forward instead, and this window's selection goes back to what it shows.
+    private func handedToOtherWindow(_ url: URL) -> Bool {
+        guard !ImageFile.isImage(url), let other = registry?.holder(of: url, except: self) else { return false }
+        registry?.focus(other)
+        sidebar.selectFile(session.currentURL ?? viewedImage)
         return true
     }
 
@@ -261,6 +294,7 @@ final class MainWindowController: NSWindowController, NSWindowDelegate, Document
         panel.canCreateDirectories = true
         panel.prompt = "Create"
         guard panel.runModal() == .OK, let url = panel.url else { return }
+        if handedToOtherWindow(url) { return }   // an existing note open elsewhere: go to it, create nothing
         do {
             try FileStore.createExclusively(url, presenter: session)
         } catch CocoaError.fileWriteFileExists {
@@ -280,6 +314,32 @@ final class MainWindowController: NSWindowController, NSWindowDelegate, Document
         alert.beginSheetModal(for: window)
     }
 
+    // MARK: New / Open… / Save (per window)
+
+    /// File › New (⌘N): a new empty note — see `newNote()`.
+    @objc func newDocument(_ sender: Any?) { newNote() }
+
+    /// File › Open…: the choice goes through the registry's routing, with this window as the target.
+    @objc func openDocument(_ sender: Any?) {
+        guard let url = Self.runOpenPanel() else { return }
+        if let registry { registry.open(url, from: self) } else { open(url) }
+    }
+
+    @objc func saveDocument(_ sender: Any?) { save() }
+
+    /// The Open… panel (folders, markdown and images), app-modal. Nil = cancelled.
+    static func runOpenPanel() -> URL? {
+        let panel = NSOpenPanel()
+        panel.canChooseDirectories = true
+        panel.canChooseFiles = true
+        panel.allowsMultipleSelection = false
+        panel.allowedContentTypes = [.folder]
+            + FolderTree.markdownExtensions.union(ImageFile.extensions).compactMap { UTType(filenameExtension: $0) }
+        panel.prompt = "Open"
+        guard panel.runModal() == .OK, let url = panel.url else { return nil }
+        return url
+    }
+
     // MARK: Save As / Move To
 
     @objc func saveDocumentAs(_ sender: Any?) {
@@ -297,6 +357,9 @@ final class MainWindowController: NSWindowController, NSWindowDelegate, Document
         switch menuItem.action {
         case #selector(saveDocumentAs(_:)): return session.currentURL != nil
         case #selector(moveDocument(_:)): return session.currentURL != nil || viewedImage != nil
+        case #selector(toggleDefaultFolder(_:)):
+            menuItem.state = DefaultFolder.isDefault(folder) ? .on : .off
+            return folder != nil
         default: return true
         }
     }
@@ -306,6 +369,13 @@ final class MainWindowController: NSWindowController, NSWindowDelegate, Document
     @discardableResult
     func saveAs(to url: URL) -> Bool {
         guard session.currentURL != nil else { return false }
+        if registry?.holder(of: url, except: self) != nil {
+            let alert = NSAlert()
+            alert.messageText = "Couldn’t save “\(url.lastPathComponent)”"
+            alert.informativeText = "“\(url.lastPathComponent)” is open in another window."
+            presentAlert(alert)
+            return false
+        }
         do {
             try session.saveAs(to: url)
         } catch {
@@ -343,6 +413,13 @@ final class MainWindowController: NSWindowController, NSWindowDelegate, Document
         let destDir = destination.standardizedFileURL
         if destDir.resolvingSymlinksInPath().path == sourceDir.resolvingSymlinksInPath().path { return true }
         let target = destDir.appendingPathComponent(source.lastPathComponent).standardizedFileURL
+        if registry?.holder(of: target, except: self) != nil {
+            let alert = NSAlert()
+            alert.messageText = "Couldn’t move “\(source.lastPathComponent)”"
+            alert.informativeText = "“\(target.lastPathComponent)” is open in another window. Nothing was moved."
+            presentAlert(alert)
+            return false
+        }
         session.save()   // the moved file carries the latest text; a failing save stays dirty and follows the note
         do {
             try FileStore.move(source, to: target, presenter: session)
@@ -405,14 +482,30 @@ final class MainWindowController: NSWindowController, NSWindowDelegate, Document
     /// Reopens the folder from the previous run as the root, and selects the last file in it
     /// only if that file still exists inside that folder.
     func restoreLastSession() {
-        let defaults = UserDefaults.standard
-        guard let folderPath = defaults.string(forKey: Self.lastFolderKey),
+        guard let folderPath = UserDefaults.standard.string(forKey: Self.lastFolderKey),
               let target = OpenTarget.resolve(URL(fileURLWithPath: folderPath)), target.file == nil else { return }
-        let filePath = defaults.string(forKey: Self.lastFileKey)
-        guard setFolder(target.folder) else { return }
-        guard let file = OpenTarget.restorableFile(filePath, in: target.folder) else { return }
+        restore(folder: target.folder)
+    }
+
+    /// Opens `folder` as the root and reopens `file` when it still exists inside it — unless another
+    /// window has that note open (then the folder only).
+    func restore(folder: URL, file filePath: String? = UserDefaults.standard.string(forKey: MainWindowController.lastFileKey)) {
+        guard setFolder(folder) else { return }
+        guard let file = OpenTarget.restorableFile(filePath, in: folder) else { return }
+        if !ImageFile.isImage(file), registry?.holder(of: file, except: self) != nil { return }   // folder only
         sidebar.reveal(file)
         openFile(file)
+    }
+
+    /// File › Use as Default Folder: makes this window's folder the default, or clears it when it is.
+    @objc func toggleDefaultFolder(_ sender: Any?) {
+        guard let folder else { return }
+        if DefaultFolder.isDefault(folder) {
+            UserDefaults.standard.removeObject(forKey: DefaultFolder.key)
+        } else {
+            UserDefaults.standard.set(folder.standardizedFileURL.path, forKey: DefaultFolder.key)
+        }
+        ProbeLog.shared.dump()
     }
 
     @discardableResult
@@ -470,8 +563,15 @@ final class MainWindowController: NSWindowController, NSWindowDelegate, Document
     // MARK: NSWindowDelegate
 
     func windowShouldClose(_ sender: NSWindow) -> Bool { prepareToClose() }
-    func windowWillClose(_ notification: Notification) { session.save() }
+    /// `windowShouldClose` already saved or the user discarded: save once more, then stop presenting
+    /// the note, so another window can open it (two presenters on one file deadlock).
+    func windowWillClose(_ notification: Notification) {
+        session.endForClosedWindow()
+        // Removal on the next turn: the registry never drops the last reference inside this callback.
+        DispatchQueue.main.async { [self] in onClose?(self) }
+    }
     func windowDidResignKey(_ notification: Notification) { session.save() }
+    func windowDidBecomeKey(_ notification: Notification) { onBecomeKey?(self) }
 
     // MARK: Probe hook
 
@@ -480,6 +580,7 @@ final class MainWindowController: NSWindowController, NSWindowDelegate, Document
         let sel = tv.selectedRange()
         return [
             "title": window?.title ?? "",
+            "visible": window?.isVisible ?? false,
             "subtitle": window?.subtitle ?? "",
             "folder": folder?.path ?? "",
             "file": session.currentURL?.path ?? "",
@@ -522,7 +623,9 @@ final class MainWindowController: NSWindowController, NSWindowDelegate, Document
             // which a probe-launched (inactive) app does not have. App-level actions (newDocument:)
             // live on the app delegate, past that chain: fall back to NSApp's own dispatch.
             let action = Selector(String(bits[0]))
-            if window?.firstResponder?.tryToPerform(action, with: sender) != true {
+            // The controller's own actions (newDocument:, toggleDefaultFolder:) are tried directly too,
+            // so the probe does not depend on the chain passing through it.
+            if window?.firstResponder?.tryToPerform(action, with: sender) != true, !tryToPerform(action, with: sender) {
                 NSApp.sendAction(action, to: nil, from: sender)
             }
         case "row":
