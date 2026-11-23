@@ -3,6 +3,7 @@ import MarkdownCore
 
 /// App-level menu actions with no AppKit declaration, so `#selector` can name them.
 @MainActor @objc protocol EditorMenuActions {
+    func newWindow(_ sender: Any?)
     func checkForUpdates(_ sender: Any?)
     func toggleAutomaticUpdateChecks(_ sender: Any?)
 }
@@ -94,6 +95,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate, EditorMenuActions, Win
     func applicationWillResignActive(_ notification: Notification) { windows.saveAll() }
 
     // MARK: Menu actions
+
+    /// File › New Window (⇧⌘N).
+    @objc func newWindow(_ sender: Any?) { windows.newWindow() }
 
     // New / Open… / Save normally reach the key window's MainWindowController; these answer only
     // when no window is key (an inactive, probe-launched app) and act on the target window.

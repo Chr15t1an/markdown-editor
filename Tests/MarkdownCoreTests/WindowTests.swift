@@ -144,4 +144,193 @@ final class WindowTests: XCTestCase {
         XCTAssertEqual(items.first { $0.title == "Open…" }?.action, #selector(WindowFileActions.openDocument(_:)))
         XCTAssertEqual(items.first { $0.title == "Save" }?.action, #selector(WindowFileActions.saveDocument(_:)))
     }
+
+    // MARK: Phase 2 — New Window, frames, one note in one window
+
+    func testFileMenuHasNewWindowWithShiftCommandN() throws {
+        let items = MainMenu.fileMenu().items
+        let new = try XCTUnwrap(items.firstIndex { $0.title == "New" })
+        let item = items[new + 1]
+        XCTAssertEqual(item.title, "New Window")
+        XCTAssertEqual(item.action, #selector(EditorMenuActions.newWindow(_:)))
+        XCTAssertEqual(item.keyEquivalent, "n")
+        XCTAssertEqual(item.keyEquivalentModifierMask, [.command, .shift])
+        XCTAssertTrue(AppDelegate().responds(to: #selector(EditorMenuActions.newWindow(_:))))
+    }
+
+    func testNewWindowAddsASecondWindowWithoutTheFrameAutosave() {
+        let a = window()
+        let b = registry.newWindow()
+        XCTAssertEqual(registry.controllers.count, 2)
+        XCTAssertTrue(registry.controllers[1] === b)
+        XCTAssertEqual(a.window?.frameAutosaveName, "MainWindow")
+        XCTAssertEqual(b.window?.frameAutosaveName, "")
+        XCTAssertTrue(a.autosavesFrame)
+        XCTAssertFalse(b.autosavesFrame)
+        XCTAssertEqual(a.splitViewController.splitView.autosaveName, "MainSplit")
+        XCTAssertNotEqual(b.splitViewController.splitView.autosaveName, "MainSplit")
+    }
+
+    func testANoteOpenInAnotherWindowFocusesItInstead() {
+        let a = window()
+        a.open(dir)
+        a.open(url("n.md"))
+        let b = window()
+        b.open(dir)
+        focused = []
+        b.sidebar.onSelectFile?(url("n.md"))
+        XCTAssertNil(b.session.currentURL)
+        XCTAssertEqual(focused.count, 1)
+        XCTAssertTrue(focused.first === a)
+        XCTAssertEqual(a.session.currentURL?.path, url("n.md").path)
+    }
+
+    func testOpenRoutesAFileOpenElsewhereToItsWindow() {
+        let a = window()
+        a.open(dir)
+        a.open(url("n.md"))
+        let b = window()
+        b.open(other)
+        XCTAssertTrue(registry.target === b)
+        focused = []
+        registry.open(url("n.md"))
+        XCTAssertTrue(focused.last === a)
+        XCTAssertNil(b.session.currentURL)
+        XCTAssertEqual(b.folder?.path, other.standardizedFileURL.path)
+    }
+
+    func testRestoreDoesNotOpenANoteHeldByAnotherWindow() {
+        let a = window()
+        a.open(dir)
+        a.open(url("n.md"))
+        defaults.set(dir.path, forKey: MainWindowController.lastFolderKey)
+        defaults.set(url("n.md").path, forKey: MainWindowController.lastFileKey)
+        let b = window()
+        b.restoreLastSession()
+        XCTAssertEqual(b.folder?.path, dir.standardizedFileURL.path)
+        XCTAssertNil(b.session.currentURL)
+        XCTAssertEqual(a.session.currentURL?.path, url("n.md").path)
+    }
+
+    func testSaveAsOntoANoteOpenInAnotherWindowIsRefused() throws {
+        let a = window()
+        a.open(dir)
+        a.open(url("n.md"))
+        let b = window()
+        b.open(other)
+        b.open(other.appendingPathComponent("o.md"))
+        insert("b-text", in: b)
+        XCTAssertFalse(b.saveAs(to: url("n.md")))
+        XCTAssertEqual(alerts, ["Couldn’t save “n.md” | “n.md” is open in another window."])
+        XCTAssertEqual(try read(url("n.md")), "n\n")
+        XCTAssertEqual(b.session.currentURL?.path, other.appendingPathComponent("o.md").standardizedFileURL.path)
+    }
+
+    func testSaveAsOntoACaseVariantOfANoteOpenElsewhereIsRefused() throws {
+        let variant = dir.appendingPathComponent("N.md")
+        guard FileManager.default.fileExists(atPath: variant.path) else { return }   // case-sensitive volume
+        let a = window()
+        a.open(dir)
+        a.open(url("n.md"))
+        let b = window()
+        b.open(other)
+        b.open(other.appendingPathComponent("o.md"))
+        XCTAssertFalse(b.saveAs(to: variant))
+        XCTAssertEqual(alerts.count, 1)
+        XCTAssertEqual(try read(url("n.md")), "n\n")
+    }
+
+    func testMoveOntoANoteOpenElsewhereIsRefused() throws {
+        let a = window()
+        a.open(dir)
+        a.open(url("n.md"))
+        try "other n\n".write(to: other.appendingPathComponent("n.md"), atomically: true, encoding: .utf8)
+        let b = window()
+        b.open(other)
+        b.open(other.appendingPathComponent("n.md"))
+        XCTAssertFalse(b.moveOpenFile(to: dir))
+        XCTAssertEqual(alerts, ["Couldn’t move “n.md” | “n.md” is open in another window. Nothing was moved."])
+        XCTAssertEqual(try read(url("n.md")), "n\n")
+        XCTAssertEqual(try read(other.appendingPathComponent("n.md")), "other n\n")
+    }
+
+    func testSameFileMatchesSymlinkAndCaseVariant() throws {
+        let n = url("n.md")
+        let link = dir.appendingPathComponent("link.md")
+        try FileManager.default.createSymbolicLink(at: link, withDestinationURL: n)
+        XCTAssertTrue(WindowRegistry.sameFile(n, link))
+        XCTAssertTrue(WindowRegistry.sameFile(n, dir.appendingPathComponent("sub/../n.md")))
+        let hard = dir.appendingPathComponent("hard.md")
+        try FileManager.default.linkItem(at: n, to: hard)
+        XCTAssertTrue(WindowRegistry.sameFile(n, hard))
+        XCTAssertFalse(WindowRegistry.sameFile(n, url("sub/s.md")))
+        // Neither exists: compared by path, case-folded.
+        XCTAssertTrue(WindowRegistry.sameFile(dir.appendingPathComponent("gone.md"), dir.appendingPathComponent("GONE.md")))
+        XCTAssertFalse(WindowRegistry.sameFile(dir.appendingPathComponent("gone.md"), dir.appendingPathComponent("gone2.md")))
+        if FileManager.default.fileExists(atPath: dir.appendingPathComponent("N.md").path) {
+            XCTAssertTrue(WindowRegistry.sameFile(n, dir.appendingPathComponent("N.md")))
+        }
+    }
+
+    func testDropOfANoteOpenElsewhereLeavesThisWindowsFolder() {
+        let a = window()
+        a.open(dir)
+        a.open(url("n.md"))
+        let b = window()
+        b.open(other)
+        focused = []
+        XCTAssertFalse(b.open(url("n.md")))
+        XCTAssertEqual(b.folder?.path, other.standardizedFileURL.path)
+        XCTAssertNil(b.session.currentURL)
+        XCTAssertTrue(focused.last === a)
+    }
+
+    func testClosingAWindowUnregistersItsNote() async throws {
+        let a = window()
+        a.open(dir)
+        a.open(url("n.md"))
+        XCTAssertTrue(NSFileCoordinator.filePresenters.contains { $0 === a.session })
+        let b = window()
+        b.open(other)
+        a.windowWillClose(Notification(name: NSWindow.willCloseNotification))
+        // The registry drops the window on a later main-queue turn: let it run (≤ 2 s).
+        let deadline = Date().addingTimeInterval(2)
+        while registry.controllers.contains(where: { $0 === a }), Date() < deadline {
+            try await Task.sleep(nanoseconds: 10_000_000)
+        }
+        XCTAssertFalse(NSFileCoordinator.filePresenters.contains { $0 === a.session })
+        XCTAssertFalse(registry.controllers.contains { $0 === a })
+        XCTAssertTrue(b.open(url("n.md")))
+        XCTAssertEqual(b.session.currentURL?.path, url("n.md").path)
+        insert("after-close", in: b)
+        let start = Date()
+        XCTAssertTrue(b.save())
+        XCTAssertLessThan(Date().timeIntervalSince(start), 2)
+        XCTAssertEqual(try read(url("n.md")), "n\nafter-close")
+    }
+
+    func testTheGuardNeverRegistersASecondPresenter() throws {
+        let a = window()
+        a.open(dir)
+        a.open(url("n.md"))
+        insert("dirty", in: a)
+        let b = window()
+        b.open(dir)
+        b.sidebar.onSelectFile?(url("n.md"))
+        b.open(url("n.md"))
+        registry.open(url("n.md"), from: b)
+        b.restoreLastSession()
+        XCTAssertNil(b.session.currentURL)
+        try "x\n".write(to: url("x.md"), atomically: true, encoding: .utf8)
+        b.open(url("x.md"))
+        XCTAssertFalse(b.saveAs(to: url("n.md")))
+        XCTAssertEqual(b.session.currentURL?.path, url("x.md").path)
+        XCTAssertEqual(NSFileCoordinator.filePresenters.filter {
+            ($0 as? FileSession)?.currentURL.map { WindowRegistry.sameFile($0, self.url("n.md")) } ?? false
+        }.count, 1)
+        let start = Date()
+        XCTAssertTrue(a.save())
+        XCTAssertLessThan(Date().timeIntervalSince(start), 2)
+        XCTAssertEqual(try read(url("n.md")), "n\ndirty")
+    }
 }

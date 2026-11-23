@@ -53,8 +53,12 @@ final class MainWindowController: NSWindowController, NSWindowDelegate, Document
         alert.beginSheetModal(for: window)
     }
 
-    init(theme: Theme = Theme()) {
+    /// False for every window but the one that owns the "MainWindow" / "MainSplit" autosave names.
+    let autosavesFrame: Bool
+
+    init(theme: Theme = Theme(), autosavesFrame: Bool = true) {
         self.theme = theme
+        self.autosavesFrame = autosavesFrame
         let window = NSWindow(
             contentRect: NSRect(origin: .zero, size: theme.defaultWindowSize),
             styleMask: [.titled, .closable, .miniaturizable, .resizable, .fullSizeContentView],
@@ -76,7 +80,7 @@ final class MainWindowController: NSWindowController, NSWindowDelegate, Document
         editorItem.minimumThickness = theme.editorMinWidth
         splitViewController.addSplitViewItem(sidebarItem)
         splitViewController.addSplitViewItem(editorItem)
-        splitViewController.splitView.autosaveName = "MainSplit"
+        if autosavesFrame { splitViewController.splitView.autosaveName = "MainSplit" }
 
         let drop = DropView(frame: NSRect(origin: .zero, size: theme.defaultWindowSize))
         drop.theme = theme
@@ -91,7 +95,7 @@ final class MainWindowController: NSWindowController, NSWindowDelegate, Document
         window.contentViewController = root
         window.setContentSize(theme.defaultWindowSize)
         window.center()
-        window.setFrameAutosaveName("MainWindow")
+        if autosavesFrame { window.setFrameAutosaveName("MainWindow") }
 
         editor.onOpen = { [weak self] url in self?.open(url) }
         sidebar.onSelectFile = { [weak self] url in
@@ -134,6 +138,7 @@ final class MainWindowController: NSWindowController, NSWindowDelegate, Document
     @discardableResult
     func open(_ url: URL) -> Bool {
         guard let target = OpenTarget.resolve(url) else { return false }
+        if let file = target.file, handedToOtherWindow(file) { return false }   // before any re-root
         if let file = target.file, let root = folder, file.path.hasPrefix(root.path + "/") {
             sidebar.reveal(file)
             openFile(file)
@@ -170,6 +175,7 @@ final class MainWindowController: NSWindowController, NSWindowDelegate, Document
 
     @discardableResult
     private func openFile(_ url: URL, focusEditor: Bool = true) -> Bool {
+        if handedToOtherWindow(url) { return false }
         if ImageFile.isImage(url) { return showImage(url) }
         guard session.open(url) else {
             sidebar.selectFile(session.currentURL ?? viewedImage)   // put the selection back on what is shown
@@ -181,6 +187,15 @@ final class MainWindowController: NSWindowController, NSWindowDelegate, Document
         UserDefaults.standard.set(url.standardizedFileURL.path, forKey: Self.lastFileKey)
         if focusEditor { editor.focus() }   // false only for plain-key navigation in the sidebar (decision 39)
         ProbeLog.shared.dump()
+        return true
+    }
+
+    /// A note open in another window is never opened here too (two presenters on one file deadlock):
+    /// that window comes forward instead, and this window's selection goes back to what it shows.
+    private func handedToOtherWindow(_ url: URL) -> Bool {
+        guard !ImageFile.isImage(url), let other = registry?.holder(of: url, except: self) else { return false }
+        registry?.focus(other)
+        sidebar.selectFile(session.currentURL ?? viewedImage)
         return true
     }
 
@@ -278,6 +293,7 @@ final class MainWindowController: NSWindowController, NSWindowDelegate, Document
         panel.canCreateDirectories = true
         panel.prompt = "Create"
         guard panel.runModal() == .OK, let url = panel.url else { return }
+        if handedToOtherWindow(url) { return }   // an existing note open elsewhere: go to it, create nothing
         do {
             try FileStore.createExclusively(url, presenter: session)
         } catch CocoaError.fileWriteFileExists {
@@ -349,6 +365,13 @@ final class MainWindowController: NSWindowController, NSWindowDelegate, Document
     @discardableResult
     func saveAs(to url: URL) -> Bool {
         guard session.currentURL != nil else { return false }
+        if registry?.holder(of: url, except: self) != nil {
+            let alert = NSAlert()
+            alert.messageText = "Couldn’t save “\(url.lastPathComponent)”"
+            alert.informativeText = "“\(url.lastPathComponent)” is open in another window."
+            presentAlert(alert)
+            return false
+        }
         do {
             try session.saveAs(to: url)
         } catch {
@@ -386,6 +409,13 @@ final class MainWindowController: NSWindowController, NSWindowDelegate, Document
         let destDir = destination.standardizedFileURL
         if destDir.resolvingSymlinksInPath().path == sourceDir.resolvingSymlinksInPath().path { return true }
         let target = destDir.appendingPathComponent(source.lastPathComponent).standardizedFileURL
+        if registry?.holder(of: target, except: self) != nil {
+            let alert = NSAlert()
+            alert.messageText = "Couldn’t move “\(source.lastPathComponent)”"
+            alert.informativeText = "“\(target.lastPathComponent)” is open in another window. Nothing was moved."
+            presentAlert(alert)
+            return false
+        }
         session.save()   // the moved file carries the latest text; a failing save stays dirty and follows the note
         do {
             try FileStore.move(source, to: target, presenter: session)
@@ -454,6 +484,7 @@ final class MainWindowController: NSWindowController, NSWindowDelegate, Document
         let filePath = defaults.string(forKey: Self.lastFileKey)
         guard setFolder(target.folder) else { return }
         guard let file = OpenTarget.restorableFile(filePath, in: target.folder) else { return }
+        if !ImageFile.isImage(file), registry?.holder(of: file, except: self) != nil { return }   // folder only
         sidebar.reveal(file)
         openFile(file)
     }

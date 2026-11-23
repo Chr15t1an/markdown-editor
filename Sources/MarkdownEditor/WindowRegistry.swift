@@ -24,12 +24,23 @@ final class WindowRegistry {
         return controllers.last
     }
 
-    /// Creates a window, wires it to the registry and shows it.
+    /// Creates a window, wires it to the registry and shows it. Only one window at a time owns the
+    /// frame autosave ("MainWindow"); every other one cascades off the window that was in front.
     @discardableResult
     func makeWindow() -> MainWindowController {
-        let c = MainWindowController()
+        let from = target?.window   // captured before the new window joins, so it never cascades off itself
+        let c = MainWindowController(autosavesFrame: !controllers.contains { $0.autosavesFrame })
+        if !c.autosavesFrame, let from, let w = c.window {
+            w.cascadeTopLeft(from: NSPoint(x: from.frame.minX, y: from.frame.maxY))
+        }
         add(c)
         return c
+    }
+
+    /// File › New Window (⇧⌘N).
+    @discardableResult
+    func newWindow() -> MainWindowController {
+        makeWindow()
     }
 
     /// Wires an existing controller into the registry and shows it (tests build their own).
@@ -58,6 +69,8 @@ final class WindowRegistry {
     /// True when `a` and `b` are one file: same file identity when both exist (catches case variants,
     /// symlinks and hard links), else the same standardized, symlink-resolved path, case-folded.
     static func sameFile(_ a: URL, _ b: URL) -> Bool {
+        // The identifier of a symlink is the link's own: resolve first.
+        let a = a.standardizedFileURL.resolvingSymlinksInPath(), b = b.standardizedFileURL.resolvingSymlinksInPath()
         if let ia = (try? a.resourceValues(forKeys: [.fileResourceIdentifierKey]))?.fileResourceIdentifier as? NSObject,
            let ib = (try? b.resourceValues(forKeys: [.fileResourceIdentifierKey]))?.fileResourceIdentifier as? NSObject {
             return ia.isEqual(ib)

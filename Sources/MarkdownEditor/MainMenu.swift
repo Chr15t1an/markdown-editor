@@ -53,6 +53,7 @@ enum MainMenu {
     static func fileMenu() -> NSMenu {
         let menu = NSMenu(title: "File")
         menu.addItem(item("New", #selector(WindowFileActions.newDocument(_:)), "n"))
+        menu.addItem(item("New Window", #selector(EditorMenuActions.newWindow(_:)), "n", [.command, .shift]))
         menu.addItem(item("Open…", #selector(WindowFileActions.openDocument(_:)), "o"))
         let recent = NSMenuItem(title: "Open Recent", action: nil, keyEquivalent: "")
         let recentMenu = NSMenu(title: "Open Recent")
