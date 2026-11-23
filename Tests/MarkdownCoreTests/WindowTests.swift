@@ -32,6 +32,7 @@ final class WindowTests: XCTestCase {
         registry = nil
         defaults.removeObject(forKey: MainWindowController.lastFolderKey)
         defaults.removeObject(forKey: MainWindowController.lastFileKey)
+        defaults.removeObject(forKey: DefaultFolder.key)
         if let dir { try? FileManager.default.removeItem(at: dir) }
         if let other { try? FileManager.default.removeItem(at: other) }
     }
@@ -332,5 +333,109 @@ final class WindowTests: XCTestCase {
         XCTAssertTrue(a.save())
         XCTAssertLessThan(Date().timeIntervalSince(start), 2)
         XCTAssertEqual(try read(url("n.md")), "n\ndirty")
+    }
+
+    // MARK: Phase 3 — the default notes folder
+
+    private func useAsDefaultItem() throws -> NSMenuItem {
+        try XCTUnwrap(MainMenu.fileMenu().items.first { $0.title == "Use as Default Folder" })
+    }
+
+    func testUseAsDefaultFolderSetsAndClearsTheKey() throws {
+        let items = MainMenu.fileMenu().items
+        let recent = try XCTUnwrap(items.firstIndex { $0.title == "Open Recent" })
+        XCTAssertEqual(items[recent + 1].title, "Use as Default Folder")
+        let item = try useAsDefaultItem()
+        XCTAssertEqual(item.action, #selector(DocumentFileActions.toggleDefaultFolder(_:)))
+        let c = window()
+        XCTAssertFalse(c.validateMenuItem(item), "disabled with no folder open")
+        c.open(dir)
+        XCTAssertTrue(c.validateMenuItem(item))
+        XCTAssertEqual(item.state, .off)
+        c.toggleDefaultFolder(item)
+        XCTAssertEqual(defaults.string(forKey: DefaultFolder.key), dir.standardizedFileURL.path)
+        XCTAssertTrue(c.validateMenuItem(item))
+        XCTAssertEqual(item.state, .on)
+        c.toggleDefaultFolder(item)
+        XCTAssertNil(defaults.string(forKey: DefaultFolder.key))
+        XCTAssertTrue(c.validateMenuItem(item))
+        XCTAssertEqual(item.state, .off)
+    }
+
+    func testNewWindowOpensTheDefaultFolder() {
+        defaults.set(dir.path, forKey: DefaultFolder.key)
+        defaults.set(url("n.md").path, forKey: MainWindowController.lastFileKey)
+        let a = window()
+        a.open(other)
+        let b = registry.newWindow()
+        XCTAssertEqual(b.folder?.path, dir.standardizedFileURL.path)
+        XCTAssertNil(b.session.currentURL)
+        XCTAssertNil(b.sidebar.selectedFile)
+        XCTAssertEqual(a.folder?.path, other.standardizedFileURL.path)
+    }
+
+    func testNewWindowWithNoOrAMissingDefaultShowsTheEmptyState() {
+        let a = registry.newWindow()
+        XCTAssertNil(a.folder)
+        defaults.set(dir.appendingPathComponent("gone").path, forKey: DefaultFolder.key)
+        let b = registry.newWindow()
+        XCTAssertNil(b.folder)
+        XCTAssertNil(DefaultFolder.url())
+        XCTAssertNotNil(defaults.string(forKey: DefaultFolder.key), "the key stays (an unmounted volume may come back)")
+        defaults.set(url("n.md").path, forKey: DefaultFolder.key)   // a file is not a folder
+        XCTAssertNil(DefaultFolder.url())
+    }
+
+    func testPlainLaunchOpensTheDefaultFolderNotTheLastFolder() {
+        defaults.set(other.path, forKey: MainWindowController.lastFolderKey)
+        defaults.set(dir.path, forKey: DefaultFolder.key)
+        registry.launch(pending: [])
+        XCTAssertEqual(registry.controllers.count, 1)
+        XCTAssertEqual(registry.controllers[0].folder?.path, dir.standardizedFileURL.path)
+    }
+
+    func testPlainLaunchRestoresTheLastFileOnlyInsideTheDefault() {
+        defaults.set(dir.path, forKey: DefaultFolder.key)
+        defaults.set(url("sub/s.md").path, forKey: MainWindowController.lastFileKey)
+        registry.launch(pending: [])
+        let c = registry.controllers[0]
+        XCTAssertEqual(c.session.currentURL?.path, url("sub/s.md").path)
+        c.session.close()
+
+        let second = WindowRegistry()
+        second.show = { _ in }
+        defaults.set(other.appendingPathComponent("o.md").path, forKey: MainWindowController.lastFileKey)
+        second.launch(pending: [])
+        XCTAssertEqual(second.controllers[0].folder?.path, dir.standardizedFileURL.path)
+        XCTAssertNil(second.controllers[0].session.currentURL)
+    }
+
+    func testPlainLaunchWithAMissingDefaultFallsBackToTheLastFolder() {
+        defaults.set(dir.appendingPathComponent("gone").path, forKey: DefaultFolder.key)
+        defaults.set(other.path, forKey: MainWindowController.lastFolderKey)
+        registry.launch(pending: [])
+        XCTAssertEqual(registry.controllers[0].folder?.path, other.standardizedFileURL.path)
+    }
+
+    func testLaunchWithAFileIgnoresTheDefault() {
+        defaults.set(dir.path, forKey: DefaultFolder.key)
+        registry.launch(pending: [other.appendingPathComponent("o.md")])
+        XCTAssertEqual(registry.controllers.count, 1)
+        let c = registry.controllers[0]
+        XCTAssertEqual(c.folder?.path, other.standardizedFileURL.path)
+        XCTAssertEqual(c.session.currentURL?.path, other.appendingPathComponent("o.md").standardizedFileURL.path)
+    }
+
+    func testNewNoteInTheNewWindowGoesIntoTheDefaultFolderAndLeavesWindowOneAlone() throws {
+        defaults.set(dir.path, forKey: DefaultFolder.key)
+        let a = window()
+        a.open(other.appendingPathComponent("o.md"))
+        let b = registry.newWindow()
+        XCTAssertTrue(b.tryToPerform(#selector(WindowFileActions.newDocument(_:)), with: nil))
+        XCTAssertTrue(FileManager.default.fileExists(atPath: url("Untitled.md").path))
+        XCTAssertEqual(b.session.currentURL?.path, url("Untitled.md").path)
+        XCTAssertEqual(a.folder?.path, other.standardizedFileURL.path)
+        XCTAssertEqual(a.session.currentURL?.path, other.appendingPathComponent("o.md").standardizedFileURL.path)
+        XCTAssertEqual(try read(other.appendingPathComponent("o.md")), "o\n")
     }
 }

@@ -7,6 +7,7 @@ import UniformTypeIdentifiers
 @MainActor @objc protocol DocumentFileActions {
     func saveDocumentAs(_ sender: Any?)
     func moveDocument(_ sender: Any?)
+    func toggleDefaultFolder(_ sender: Any?)
 }
 
 /// File › New, Open… and Save, answered by the window they are chosen in (the app delegate keeps
@@ -356,6 +357,9 @@ final class MainWindowController: NSWindowController, NSWindowDelegate, Document
         switch menuItem.action {
         case #selector(saveDocumentAs(_:)): return session.currentURL != nil
         case #selector(moveDocument(_:)): return session.currentURL != nil || viewedImage != nil
+        case #selector(toggleDefaultFolder(_:)):
+            menuItem.state = DefaultFolder.isDefault(folder) ? .on : .off
+            return folder != nil
         default: return true
         }
     }
@@ -478,15 +482,30 @@ final class MainWindowController: NSWindowController, NSWindowDelegate, Document
     /// Reopens the folder from the previous run as the root, and selects the last file in it
     /// only if that file still exists inside that folder.
     func restoreLastSession() {
-        let defaults = UserDefaults.standard
-        guard let folderPath = defaults.string(forKey: Self.lastFolderKey),
+        guard let folderPath = UserDefaults.standard.string(forKey: Self.lastFolderKey),
               let target = OpenTarget.resolve(URL(fileURLWithPath: folderPath)), target.file == nil else { return }
-        let filePath = defaults.string(forKey: Self.lastFileKey)
-        guard setFolder(target.folder) else { return }
-        guard let file = OpenTarget.restorableFile(filePath, in: target.folder) else { return }
+        restore(folder: target.folder)
+    }
+
+    /// Opens `folder` as the root and reopens `file` when it still exists inside it — unless another
+    /// window has that note open (then the folder only).
+    func restore(folder: URL, file filePath: String? = UserDefaults.standard.string(forKey: MainWindowController.lastFileKey)) {
+        guard setFolder(folder) else { return }
+        guard let file = OpenTarget.restorableFile(filePath, in: folder) else { return }
         if !ImageFile.isImage(file), registry?.holder(of: file, except: self) != nil { return }   // folder only
         sidebar.reveal(file)
         openFile(file)
+    }
+
+    /// File › Use as Default Folder: makes this window's folder the default, or clears it when it is.
+    @objc func toggleDefaultFolder(_ sender: Any?) {
+        guard let folder else { return }
+        if DefaultFolder.isDefault(folder) {
+            UserDefaults.standard.removeObject(forKey: DefaultFolder.key)
+        } else {
+            UserDefaults.standard.set(folder.standardizedFileURL.path, forKey: DefaultFolder.key)
+        }
+        ProbeLog.shared.dump()
     }
 
     @discardableResult

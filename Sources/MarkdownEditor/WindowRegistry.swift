@@ -1,6 +1,23 @@
 import AppKit
 import MarkdownCore
 
+/// The default notes folder (File › Use as Default Folder): what new windows and plain launches open.
+enum DefaultFolder {
+    static let key = "defaultFolder"
+    /// The stored default when it is still a folder on disk; nil when unset or gone.
+    static func url(_ defaults: UserDefaults = .standard) -> URL? {
+        guard let path = defaults.string(forKey: key),
+              let target = OpenTarget.resolve(URL(fileURLWithPath: path)), target.file == nil else { return nil }
+        return target.folder
+    }
+
+    /// True when `folder` is the stored default (and still a folder).
+    static func isDefault(_ folder: URL?, _ defaults: UserDefaults = .standard) -> Bool {
+        guard let folder, let d = url(defaults) else { return false }
+        return d.standardizedFileURL.path == folder.standardizedFileURL.path
+    }
+}
+
 /// Every main window, and which one an app-level action or an external open goes to.
 /// Rule: a note is open in at most one window (two FileSession presenters on one file
 /// deadlock the main thread on a coordinated save — research Q4).
@@ -37,10 +54,23 @@ final class WindowRegistry {
         return c
     }
 
-    /// File › New Window (⇧⌘N).
+    /// File › New Window (⇧⌘N): the default folder with nothing selected, else the empty state.
     @discardableResult
     func newWindow() -> MainWindowController {
-        makeWindow()
+        let c = makeWindow()
+        if let d = DefaultFolder.url() { c.open(d) }
+        return c
+    }
+
+    /// App launch: one window. A plain launch opens the default folder (restoring the last file only
+    /// when it is inside it), else the last session; a launch with files opens them.
+    func launch(pending urls: [URL]) {
+        let c = makeWindow()
+        if urls.isEmpty {
+            if let d = DefaultFolder.url() { c.restore(folder: d) } else { c.restoreLastSession() }
+        } else {
+            for url in urls { open(url, from: c) }
+        }
     }
 
     /// Wires an existing controller into the registry and shows it (tests build their own).

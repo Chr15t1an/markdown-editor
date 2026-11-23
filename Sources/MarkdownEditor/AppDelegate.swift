@@ -22,14 +22,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate, EditorMenuActions, Win
     }
 
     func applicationDidFinishLaunching(_ notification: Notification) {
-        let controller = windows.makeWindow()
         didFinishLaunching = true
-        if pendingURLs.isEmpty {
-            controller.restoreLastSession()
-        } else {
-            pendingURLs.forEach { windows.open($0, from: controller) }
-            pendingURLs = []
-        }
+        windows.launch(pending: pendingURLs)
+        pendingURLs = []
         ProbeLog.shared.start()
         ProbeLog.shared.dump()
         NSApp.activate()

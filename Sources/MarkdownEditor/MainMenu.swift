@@ -61,6 +61,7 @@ enum MainMenu {
         recent.submenu = recentMenu
         // NSDocumentController fills a submenu whose items target clearRecentDocuments.
         menu.addItem(recent)
+        menu.addItem(item("Use as Default Folder", #selector(DocumentFileActions.toggleDefaultFolder(_:))))
         menu.addItem(.separator())
         menu.addItem(item("Close Window", #selector(NSWindow.performClose(_:)), "w"))
         menu.addItem(item("Save", #selector(WindowFileActions.saveDocument(_:)), "s"))
