@@ -8,7 +8,7 @@ uses the section verbatim as the GitHub Release notes, and the release-note post
 Heading format: `## X.Y.Z — YYYY-MM-DD` (the version must match `scripts/check-version.sh`).
 `## Unreleased` collects changes until the next release, when it is renamed to `## X.Y.Z — YYYY-MM-DD`.
 
-## Unreleased
+## 0.8.0 — 2026-11-24
 
 Several windows at once, and a default notes folder that new windows and plain launches open.
 
